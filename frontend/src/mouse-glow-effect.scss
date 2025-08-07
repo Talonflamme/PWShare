@@ -1,0 +1,24 @@
+.mouse-glow-effect {
+    position: relative;
+    --mouse-x: -10000px;
+    --mouse-y: -10000px;
+    --mouse-glow-color: rgb(255, 255, 255, 0.06);
+    --mouse-glow-size: 350px;
+
+    &::before {
+        pointer-events: none;
+        transition: opacity 0.4s;
+        z-index: 1000;
+        opacity: 0;
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        border-radius: inherit;
+        content: "";
+        background: radial-gradient(var(--mouse-glow-size) circle at var(--mouse-x) var(--mouse-y), var(--mouse-glow-color), transparent 40%);
+    }
+
+    &:hover::before {
+        opacity: 1;
+    }
+}
