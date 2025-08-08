@@ -128,7 +128,7 @@ fn inv_mix_columns(state: &mut State) {
 }
 
 /// Encrypts the message (128 bits) using the key.
-pub fn aes_encrypt<K: AESKey>(plain_message: u128, key: K) -> u128 {
+pub fn aes_encrypt<K: AESKey>(plain_message: u128, key: &K) -> u128 {
     // 1. Key Expansion
     let round_keys = key.generate_round_keys();
 
@@ -153,7 +153,7 @@ pub fn aes_encrypt<K: AESKey>(plain_message: u128, key: K) -> u128 {
     state.into()
 }
 
-pub fn aes_decrypt<K: AESKey>(cipher_message: u128, key: K) -> u128 {
+pub fn aes_decrypt<K: AESKey>(cipher_message: u128, key: &K) -> u128 {
     // 1. Key Expansion
     let round_keys = key.generate_round_keys();
 

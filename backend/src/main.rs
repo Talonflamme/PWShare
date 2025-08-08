@@ -86,7 +86,7 @@ fn pem_demo() {
 pub fn main() {
     let key = AESKey256::new_random();
     let message: u128 = 0x1169420;
-    let cipher: u128 = aes::aes_encrypt(message, key);
+    let cipher: u128 = aes::aes_encrypt(message, &key);
 
     println!("Message: {:x}", message);
     println!("Cipher : {:x}", cipher);

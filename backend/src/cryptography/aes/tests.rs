@@ -54,8 +54,8 @@ fn do_monte_carlo_test<K: AESKey>(case: AESTestCase) {
 
     for _ in 0..10000 {
         let out = match case.operation {
-            Decrypt => aes_decrypt(inp, key.clone()),
-            Encrypt => aes_encrypt(inp, key.clone()),
+            Decrypt => aes_decrypt(inp, &key),
+            Encrypt => aes_encrypt(inp, &key),
         };
         inp = out;
     }
@@ -85,7 +85,7 @@ fn test_case<K: AESKey>(case: AESTestCase) {
 
     match case.operation {
         Encrypt => {
-            let cipher_block = aes_encrypt(plain, key);
+            let cipher_block = aes_encrypt(plain, &key);
             assert_eq!(
                 cipher_block, cipher,
                 "Incorrect encryption of count: {}.\nExpected: {:x}\nGot: {:x}",
@@ -93,7 +93,7 @@ fn test_case<K: AESKey>(case: AESTestCase) {
             );
         }
         Decrypt => {
-            let plain_block = aes_decrypt(cipher, key);
+            let plain_block = aes_decrypt(cipher, &key);
             assert_eq!(
                 plain_block, plain,
                 "Incorrect decryption of count: {}.\nExpected: {:x}\nGot:      {:x}",
