@@ -5,7 +5,7 @@ mod sbox;
 
 #[cfg(test)]
 mod tests;
-mod galois_mul;
+pub mod galois_mul;
 
 pub use aes::*;
 pub use aes_key::*;

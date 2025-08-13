@@ -1,12 +1,14 @@
 use crate::cryptography::aes::{aes_decrypt, aes_encrypt, AESKey};
-use crate::cryptography::mode_of_operation::ModeOfOperation;
+use crate::cryptography::mode_of_operation::{BasicModeOfOperation, ModeOfOperation};
 
 /// The `Electronic Code Block` mode encodes each block separately from one another.
 /// This is easy, but gives up some information about the plaintext.
 /// More information: https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Electronic_codebook_(ECB)
 pub struct ECB;
 
-impl ModeOfOperation for ECB {
+impl ModeOfOperation for ECB {}
+
+impl BasicModeOfOperation for ECB {
     fn encrypt<K: AESKey>(&self, key: &K, plaintext: &[u128]) -> Vec<u128> {
         plaintext.iter().map(|plain_block| aes_encrypt(*plain_block, key)).collect()
     }

@@ -1,5 +1,5 @@
 use crate::cryptography::aes::{aes_decrypt, aes_encrypt, AESKey};
-use crate::cryptography::mode_of_operation::ModeOfOperation;
+use crate::cryptography::mode_of_operation::{BasicModeOfOperation, ModeOfOperation};
 
 /// The `Cipher Block Chaining` mode encodes each block and XORed the result with the next
 /// message in order. The resulting cipher of that is then again XORed with the next block.
@@ -8,7 +8,9 @@ pub struct CBC {
     pub iv: u128,
 }
 
-impl ModeOfOperation for CBC {
+impl ModeOfOperation for CBC {}
+
+impl BasicModeOfOperation for CBC {
     fn encrypt<K: AESKey>(&self, key: &K, plaintext: &[u128]) -> Vec<u128> {
         let mut c_last = self.iv;
         let mut res = Vec::with_capacity(plaintext.len());

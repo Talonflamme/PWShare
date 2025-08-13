@@ -1,5 +1,8 @@
-/// Multiply `a` and `b` in GF(2)
-pub fn gmul(mut a: u8, mut b: u8) -> u8 {
+/// Multiply `a` and `b` in GF(2).
+///
+/// Note: As by AES spec, `a` and `b` are both assumed to be *big-endian*, i.e. the LSB of these bytes map to
+/// `x^0`.
+pub fn gmul8(mut a: u8, mut b: u8) -> u8 {
     let mut p: u8 = 0;
 
     for _ in 0..8 {
@@ -15,6 +18,28 @@ pub fn gmul(mut a: u8, mut b: u8) -> u8 {
         }
 
         b >>= 1;
+    }
+
+    p
+}
+
+/// Multiply a and b in GF(2^128).
+///
+/// Note: As by AES-GCM spec, `a` and `b` are both *little-endian*, i.e. the LSB maps to `x^127`.
+pub fn gmul128(mut a: u128, b: u128) -> u128 {
+    let mut p: u128 = 0;
+    const R: u128 = 0xe1 << 120;
+
+    for i in (0..128).rev() {
+        if b & (1 << i) != 0 {
+            p ^= a;
+        }
+
+        if a & 1 != 0 {
+            a = (a >> 1) ^ R;
+        } else {
+            a >>= 1;
+        }
     }
 
     p
@@ -145,12 +170,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_mul() {
-        assert_eq!(gmul(0x00, 0x53), 0x00);
-        assert_eq!(gmul(0x01, 0x83), 0x83);
-        assert_eq!(gmul(0x02, 0x03), 0x06);
-        assert_eq!(gmul(0x57, 0x83), 0xc1);
-        assert_eq!(gmul(0x13, 0x13), 0x1e);
-        assert_eq!(gmul(0x02, 0x80), 0x1b);
+    fn test_mul8() {
+        assert_eq!(gmul8(0x00, 0x53), 0x00);
+        assert_eq!(gmul8(0x01, 0x83), 0x83);
+        assert_eq!(gmul8(0x02, 0x03), 0x06);
+        assert_eq!(gmul8(0x57, 0x83), 0xc1);
+        assert_eq!(gmul8(0x13, 0x13), 0x1e);
+        assert_eq!(gmul8(0x02, 0x80), 0x1b);
+    }
+
+    #[test]
+    fn test_mul128() {
+        assert_eq!(gmul128(0xfe1b14343b106980550caef9618a9261, 0), 0);
+        assert_eq!(gmul128(0x46db76078d954e504890afe0b0ac88b8, 1 << 127), 0x46db76078d954e504890afe0b0ac88b8);
+        assert_eq!(gmul128(0x526a2aaf7ccb8c0925cb88187c0328cd, 0xc8edba2a4ea81111ab65e99ac4d93858), 0x4d5afa6b0e6ffd30564e22d62f557db5);
+        assert_eq!(gmul128(0x462bfa5335147deb3eb024ea0a8681df, 0xc8b7bdc9076975cbdbb65cddabb8988c), 0xa2fed3648057ddd6512198c69f6e0ce7);
+        assert_eq!(gmul128(0x26d01e6ab23dfe76f4002fd45519a86d, 0x8e5299192bc09708910a3d4b347fa84), 0xfc171b50a0f8d29f592758c9ac20d000);
+        assert_eq!(gmul128(0xd5d6395255ba598f20e7578cedf706cf, 0x284fb6708b39572442d2856986c35afe), 0xa6b6ccb7f523ee064dbdf82da977569e);
+        assert_eq!(gmul128(0x16b861645025791066c9106ae6c84049, 0xe87af2568522e32c2a37624b25332fd), 0xa6d965f216f57749540be85513cea8a8);
+        assert_eq!(gmul128(0x3583604f7906043652de94b1f0e962eb, 0x487c2fa94e26faef2d474ac158e6a7ed), 0x45b876df315ff63701598e6d7f8342fa);
     }
 }

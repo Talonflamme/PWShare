@@ -1,5 +1,5 @@
 use crate::cryptography::aes::{aes_encrypt, AESKey};
-use crate::cryptography::mode_of_operation::ModeOfOperation;
+use crate::cryptography::mode_of_operation::{BasicModeOfOperation, ModeOfOperation};
 
 /// The `Counter` mode counts up from a one-time-use value called `nonce`.
 /// Each newly generated number (by for example counting) is put into the encryption function
@@ -12,7 +12,7 @@ pub struct CTR {
     /// Recommended is either 64-bits (=8 bytes) for both nonce and counter or 96-bits (=12 bytes)
     /// for nonce and 32-bits (=4 bytes) for the counter. The amount of bytes for the counter
     /// is calculated based on the size of nonce.
-    nonce: Vec<u8>,
+    pub nonce: Vec<u8>,
 }
 
 fn num_fits_in_n_bytes(value: usize, n: usize) -> bool {
@@ -20,27 +20,44 @@ fn num_fits_in_n_bytes(value: usize, n: usize) -> bool {
     n >= usize_bytes || 1usize << (8 * n) - 1 >= value
 }
 
-impl ModeOfOperation for CTR {
+impl CTR {
+    /// Encrypts the plaintext. The counter is `initial` for the first block and is then increment
+    /// by 1 for each of the next blocks. Also assumes that the counter does not overflow.
+    pub fn encrypt_with_initial<K: AESKey>(
+        key: &K,
+        plaintext: &[u128],
+        initial: u128,
+    ) -> Vec<u128> {
+        plaintext
+            .iter()
+            .enumerate()
+            .map(|(i, plain_block)| {
+                let cipher_input = initial + (i as u128);
+                let cipher_output = aes_encrypt(cipher_input, key);
+                plain_block ^ cipher_output
+            })
+            .collect()
+    }
+}
+
+impl ModeOfOperation for CTR {}
+
+impl BasicModeOfOperation for CTR {
     fn encrypt<K: AESKey>(&self, key: &K, plaintext: &[u128]) -> Vec<u128> {
         let bytes_for_nonce = self.nonce.len();
         let bytes_for_counter = 16 - bytes_for_nonce;
 
-        assert!(num_fits_in_n_bytes(plaintext.len(), bytes_for_counter), "The counter overflowed");
+        assert!(
+            num_fits_in_n_bytes(plaintext.len(), bytes_for_counter),
+            "The counter overflowed"
+        );
 
         let mut buffer = [0u8; 16];
         buffer[..bytes_for_nonce].copy_from_slice(self.nonce.as_slice());
 
         let nonce = u128::from_be_bytes(buffer);
 
-        plaintext
-            .iter()
-            .enumerate()
-            .map(|(i, plain_block)| {
-                let cipher_input = nonce | (i as u128);
-                let cipher_output = aes_encrypt(cipher_input, key);
-                plain_block ^ cipher_output
-            })
-            .collect()
+        Self::encrypt_with_initial(key, plaintext, nonce)
     }
 
     fn decrypt<K: AESKey>(&self, key: &K, ciphertext: &[u128]) -> Vec<u128> {
