@@ -8,6 +8,10 @@ use crate::cryptography::mode_of_operation::ctr::CTR;
 /// The Galois/Counter Mode (GCM) is a mode of operations for symmetric-key block ciphers. It not
 /// encrypts data but also authenticates it with optional additional authenticated data (AAD).
 pub struct GCM {
+    /// The nonce is a value used exactly once. It will be appended with the counter to create
+    /// a unique 128-bit number for each plaintext block (independent of block values). This
+    /// is safe as long as the `(nonce, counter)` pair is never used again. It can be of any
+    /// length (even more than 16 bytes or fewer).
     nonce: Vec<u8>
 }
 

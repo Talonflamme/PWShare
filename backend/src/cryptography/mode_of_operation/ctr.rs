@@ -6,8 +6,8 @@ use crate::cryptography::mode_of_operation::{BasicModeOfOperation, ModeOfOperati
 /// and then XORed with the plaintext to get ciphertext.
 pub struct CTR {
     /// The nonce value is the start of the counter and mustn't repeat with the same key.
-    /// It can be of any length and is appended with the Counter: `nonce || counter`. Hence,
-    /// the len(nonce) + len(counter) must be equal to 128 bits. Neither nonce nor count
+    /// It can be of any length (less than 16 bytes) and is appended with the Counter: `nonce || counter`.
+    /// Hence, the len(nonce) + len(counter) must be equal to 128 bits. Neither nonce nor count
     /// are allowed to repeat, hence a sufficiently large number of both is required.
     /// Recommended is either 64-bits (=8 bytes) for both nonce and counter or 96-bits (=12 bytes)
     /// for nonce and 32-bits (=4 bytes) for the counter. The amount of bytes for the counter
@@ -44,6 +44,8 @@ impl ModeOfOperation for CTR {}
 
 impl BasicModeOfOperation for CTR {
     fn encrypt<K: AESKey>(&self, key: &K, plaintext: &[u128]) -> Vec<u128> {
+        assert!(self.nonce.len() <= 16, "Nonce can only be 16 bytes long.");
+        
         let bytes_for_nonce = self.nonce.len();
         let bytes_for_counter = 16 - bytes_for_nonce;
 
