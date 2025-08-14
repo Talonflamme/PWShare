@@ -16,6 +16,8 @@ pub trait BasicModeOfOperation: ModeOfOperation {
     fn decrypt<K: AESKey>(&self, key: &K, ciphertext: &[u128]) -> Vec<u128>;
 }
 
+/// Error struct that is used when the authentification fails when decrypting in Aead mode.
+#[derive(Debug, PartialEq)]
 pub struct AeadDecryptionTagMissmatch;
 
 /// Mode of operations with authentication and AEAD (authenticated encryption with associated data).

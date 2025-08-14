@@ -38,12 +38,8 @@ pub fn test_encrypt_aead<K: AESKey, M: AeadModeOfOperation>(
     let expected_ciphertext = hex_to_u128_vec(expected_ciphertext);
     let expected_tag = u128::from_str_radix(expected_tag, 16).expect("Parsing error");
 
-    let mut vec = vec![];
-
-    let aad = aad.map(|s| {
-        vec = hex_to_u128_vec(s);
-        vec.as_slice()
-    });
+    let aad_owner = aad.map(hex_to_u128_vec);
+    let aad = aad_owner.as_deref();
 
     let cipher = AESCipherAead::new(key, mode);
     let (ciphertext, tag) = cipher.encrypt(plain.as_slice(), aad);
@@ -67,4 +63,26 @@ pub fn test_decrypt<K: AESKey, M: BasicModeOfOperation>(
     let actual = cipher.decrypt(ciphertext.as_slice());
 
     assert_eq!(actual, expected);
+}
+
+pub fn test_decrypt_aead<K: AESKey, M: AeadModeOfOperation>(
+    key: &str,
+    ciphertext: &str,
+    aad: Option<&str>,
+    expected_plaintext: Result<&str, AeadDecryptionTagMissmatch>,
+    received_tag: &str,
+    mode: M
+) {
+    let key = K::from_be_hex(key);
+    let ciphertext = hex_to_u128_vec(ciphertext);
+    let expected_plaintext = expected_plaintext.map(hex_to_u128_vec);
+    let received_tag = u128::from_str_radix(received_tag, 16).expect("Parsing error");
+
+    let aad_owner = aad.map(hex_to_u128_vec);
+    let aad = aad_owner.as_deref();
+
+    let cipher = AESCipherAead::new(key, mode);
+    let plaintext = cipher.decrypt(ciphertext.as_slice(), aad, received_tag);
+
+    assert_eq!(expected_plaintext, plaintext);
 }
