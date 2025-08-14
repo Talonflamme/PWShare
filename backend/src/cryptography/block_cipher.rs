@@ -34,7 +34,7 @@ impl<K: AESKey, M: AeadModeOfOperation> AESCipherAead<K, M> {
         self.mode.encrypt(&self.key, plaintext, aad)
     }
 
-    pub fn decrypt(&self, ciphertext: &[u128], aad: Option<&[u128]>, tag: u128) -> Result<Vec<u128>, AeadDecryptionTagMissmatch> {
+    pub fn decrypt(&self, ciphertext: &[u128], aad: Option<&[u128]>, tag: u128) -> Result<Vec<u128>, AeadDecryptionTagMismatch> {
         self.mode.decrypt(&self.key, ciphertext, aad, tag)
     }
 }

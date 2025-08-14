@@ -69,7 +69,7 @@ pub fn test_decrypt_aead<K: AESKey, M: AeadModeOfOperation>(
     key: &str,
     ciphertext: &str,
     aad: Option<&str>,
-    expected_plaintext: Result<&str, AeadDecryptionTagMissmatch>,
+    expected_plaintext: Result<&str, AeadDecryptionTagMismatch>,
     received_tag: &str,
     mode: M
 ) {

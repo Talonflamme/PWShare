@@ -2,7 +2,7 @@ use crate::cryptography::aes::galois_mul::gmul128;
 use crate::cryptography::aes::{aes_encrypt, AESKey};
 use crate::cryptography::mode_of_operation::ctr::CTR;
 use crate::cryptography::mode_of_operation::{
-    AeadDecryptionTagMissmatch, AeadModeOfOperation, ModeOfOperation,
+    AeadDecryptionTagMismatch, AeadModeOfOperation, ModeOfOperation,
 };
 
 /// The Galois/Counter Mode (GCM) is a mode of operations for symmetric-key block ciphers. It not
@@ -125,7 +125,7 @@ impl AeadModeOfOperation for GCM {
         ciphertext: &[u128],
         aad: Option<&[u128]>,
         tag: u128,
-    ) -> Result<Vec<u128>, AeadDecryptionTagMissmatch> {
+    ) -> Result<Vec<u128>, AeadDecryptionTagMismatch> {
         // key dependant point H = E(0^128)
         let h = aes_encrypt(0, key);
         let counter0 = self.calculate_counter0(h);
@@ -134,7 +134,7 @@ impl AeadModeOfOperation for GCM {
         let calculated_tag = Self::g_hash(h, aad.unwrap_or(&[]), ciphertext) ^ masking_key;
 
         if tag != calculated_tag {
-            return Err(AeadDecryptionTagMissmatch);
+            return Err(AeadDecryptionTagMismatch);
         }
 
         // encryption and decryption are the same
@@ -148,7 +148,7 @@ mod tests {
     use crate::cryptography::aes::{AESKey128, AESKey192, AESKey256};
     use crate::cryptography::mode_of_operation::gcm::GCM;
     use crate::cryptography::mode_of_operation::tests::{test_decrypt_aead, test_encrypt_aead};
-    use crate::cryptography::mode_of_operation::AeadDecryptionTagMissmatch;
+    use crate::cryptography::mode_of_operation::AeadDecryptionTagMismatch;
 
     #[test]
     fn gcm_encrypt_128() {
@@ -324,7 +324,7 @@ mod tests {
             "78ab61e03443199e9dce64d7b5a28cc6",
             "a0ada4f1a871235b299ecb49e7d7bf3ec9d2398689a39899a7b503f363262ad0b8f030e0a60593aa5cfb16ab3b07610b2666d10073276ea5bb5daba0e1755cfcb3025cd597dd44c8ba503b8ee6882bb58842409a10f22d0ccc2cac9fb0bb402614923732f4d6ed6445d6c8ea484f53cbc88fae05f2cd8f98b5e552fa024aea64",
             Some("a37634e0b591f10e25d04db1c0541263"),
-            Err(AeadDecryptionTagMissmatch),
+            Err(AeadDecryptionTagMismatch),
             "132414aa0f3dc80a845e00b58a2caf4f",  // last `f` should really be an `e`
             GCM::new(vec![0x05, 0x23, 0xef, 0x11, 0x85, 0x90, 0x32, 0xb4, 0x0a, 0xdf, 0x56, 0x04, 0x93, 0x76, 0x74, 0xd3])
         );
@@ -333,7 +333,7 @@ mod tests {
             "10e1ff7ddcfabf41be08bfdbf3b14db54f9603649f43afe8",
             "6f815b9fd97dfc8cd69d788fffc55615d4eb3da3dd05ae775d1a37a753a445417a384189ef6f3eb8b7ec594c0964c687b1c3da1b07ee9d6810b10af2160c1870f4053ed10cf8597fbc29ff79a0566f0b78c662a2b3709558330f23bfdc3a47f228effa8c9ec8ba442c9f5361bf5b9ccf2e8ad4dd5d394f35666d26b01797a87d",
             Some("feda55f9d6f0f7e3591da15728a54c6cad6f24856049fd4457cebd82d5cb22eb00da44aea499a91e9377c14ae731af66"),
-            Err(AeadDecryptionTagMissmatch),
+            Err(AeadDecryptionTagMismatch),
             "a00b475d7f0d371e6b3aaa9fd678b21d", // first `a` should be a `4`
             GCM::new(vec![0x97, 0x2e, 0x1c, 0xc4])
         );
@@ -342,7 +342,7 @@ mod tests {
             "f2601f8992b98cf6f0c949649faa86afb4699cd5ea0c1e4deb324ce76af00a91",
             "173fd193c2a5067c6693098bafce0225c9f099765df681bd22fd3c20e62f4d88794645f5a6566710dfb5699162aafea1ba157eda8d005b1261cc33fe8d995aa4d7776c221c074c9919967b37c201d53a4cbf4e2489b9d075afab9e1e49b93b83036f87a64fe2b81c4da150d363e16ab08481783b378c081eac2da6f9bd69a920",
             None,
-            Err(AeadDecryptionTagMissmatch),
+            Err(AeadDecryptionTagMismatch),
             "42513dc22efb76c633e16c358f63303e", // The `7` in the middle should be an `8`
             GCM::new(vec![0xb3, 0x16, 0x61, 0xcc, 0x47, 0xbe])
         );

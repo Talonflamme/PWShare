@@ -18,7 +18,7 @@ pub trait BasicModeOfOperation: ModeOfOperation {
 
 /// Error struct that is used when the authentification fails when decrypting in Aead mode.
 #[derive(Debug, PartialEq)]
-pub struct AeadDecryptionTagMissmatch;
+pub struct AeadDecryptionTagMismatch;
 
 /// Mode of operations with authentication and AEAD (authenticated encryption with associated data).
 pub trait AeadModeOfOperation: ModeOfOperation {
@@ -39,5 +39,5 @@ pub trait AeadModeOfOperation: ModeOfOperation {
         ciphertext: &[u128],
         aad: Option<&[u128]>,
         tag: u128,
-    ) -> Result<Vec<u128>, AeadDecryptionTagMissmatch>;
+    ) -> Result<Vec<u128>, AeadDecryptionTagMismatch>;
 }
