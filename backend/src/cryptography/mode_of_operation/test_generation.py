@@ -39,7 +39,12 @@ def generate_encrypt(key_len, mode):
 def generate_encrypt_gcm(key_len):
     key = get_random_bytes(key_len)
 
-    plaintext = get_random_bytes(16 * 8)
+    if random.choice([False, True]):
+        plaintext = get_random_bytes(16 * 4)
+    else:
+        length = random.randint(5, 16 * 5)
+        plaintext = get_random_bytes(length)
+
     nonce_len = random.randint(1, 16)  # inclusive
     nonce = get_random_bytes(nonce_len)
 
@@ -64,7 +69,12 @@ def generate_encrypt_gcm(key_len):
 def generate_decrypt_gcm(key_len):
     key = get_random_bytes(key_len)
 
-    plaintext = get_random_bytes(16 * 8)
+    if random.choice([False, True]):
+        plaintext = get_random_bytes(16 * 4)
+    else:
+        length = random.randint(5, 16 * 5)
+        plaintext = get_random_bytes(length)
+
     nonce_len = random.randint(1, 16)  # inclusive
     nonce = get_random_bytes(nonce_len)
 
@@ -84,7 +94,6 @@ def generate_decrypt_gcm(key_len):
     print(f"\"{tag.hex()}\",")
     print("GCM::new(vec![%s])" % ", ".join(f"0x{x}" for x in nonce.hex(sep=",").split(",")))
     print(");")
-
 
 
 def generate_decrypt(key_len, mode):

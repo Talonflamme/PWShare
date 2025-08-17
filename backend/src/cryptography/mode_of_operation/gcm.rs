@@ -1,6 +1,5 @@
 use crate::cryptography::aes::galois_mul::gmul128;
 use crate::cryptography::aes::{aes_encrypt, AESKey};
-use crate::cryptography::mode_of_operation::ctr::CTR;
 use crate::cryptography::mode_of_operation::{
     AeadDecryptionTagMismatch, AeadModeOfOperation, ModeOfOperation,
 };
@@ -44,22 +43,37 @@ impl GCM {
     /// `H = E(0^128)`, the encryption of 128 zero bits<br>
     /// `A`, the data which is only authenticated, not encrypted, also `AAD`<br>
     /// `C`, the ciphertext<br>
-    /// `m = len(A)`, the amount of 128-bit blocks in `A`<br>
-    /// `n = len(C)`, the amount of 128-bit blocks in `C`<br>
-    fn g_hash(h: u128, a: &[u128], c: &[u128]) -> u128 {
-        let m = a.len();
-        let n = c.len();
-
+    /// `m = len(A) / 128`, the amount of 128-bit blocks in `A` (rounded up)<br>
+    /// `n = len(C) / 128`, the amount of 128-bit blocks in `C` (rounded up)<br>
+    fn g_hash(h: u128, a: &[u8], c: &[u8]) -> u128 {
         // This is where the padded information is stored.
         // The 128 block that is stored here is len(A) || len(C) of the 64-bit representations
-        // of the bit length of A and C. Since m and n are the amount of 128-bit blocks, we need
-        // to multiply this number by 128 or shift to the left by 7, which is where the shifts come
-        // from (71 = 64 + 7). If `a` and `c` weren't whole 128-bit blocks, this would have to be
-        // changed.
-        let last_block_value = ((m as u128) << 71) | ((n as u128) << 7);
+        // of the bit length of A and C. Since `a` and `c` contain bytes, we multiply the amount
+        // bytes with 8 (or left-shift 3).
+        let last_block_value = ((a.len() as u128) << 67) | ((c.len() as u128) << 3);
 
-        let mut hash = Self::g_hash_with_initial(h, a, 0);
-        hash = Self::g_hash_with_initial(h, c, hash);
+        fn convert_to_u128(slice: &[u8], words: &mut Vec<u128>) {
+            let (chunks, rem) = slice.as_chunks::<16>();
+            words.extend(chunks.iter().map(|&chunk| u128::from_be_bytes(chunk)));
+
+            if rem.len() != 0 {
+                let mut buffer = [0; 16];
+                buffer[..rem.len()].copy_from_slice(rem);
+                words.push(u128::from_be_bytes(buffer));
+            }
+        }
+
+        // convert a and c into 128 words
+        let capacity = a.len() / 16
+            + (a.len() % 16 != 0) as usize
+            + c.len() / 16
+            + (c.len() % 16 != 0) as usize;
+
+        let mut words = Vec::with_capacity(capacity);
+        convert_to_u128(a, &mut words);
+        convert_to_u128(c, &mut words);
+
+        let mut hash = Self::g_hash_with_initial(h, words.as_slice(), 0);
         hash = Self::g_hash_with_initial(h, &[last_block_value], hash);
         hash
     }
@@ -92,17 +106,49 @@ impl GCM {
             GCM::g_hash_with_initial(h, result.as_slice(), 0)
         }
     }
+
+    /// Encrypts/decrypts the plaintext/ciphertext by XORing the encrypted output
+    /// of the counter with the input. Bytes in the masks (encryption of counter) that
+    /// don't have corresponding bytes in plain-/ciphertext are unused.
+    ///
+    /// `counter0`: the counter0 or J0 number which is *not* used to encrypt the first
+    /// block. This counter will be incremented with 1 for each 128-bit block. The first
+    /// block will hence be XORed with the result of `counter0 + 1`.
+    fn encrypt_ctr<K: AESKey>(key: &K, plaintext: &[u8], counter0: u128) -> Vec<u8> {
+        let (chunks, remainder) = plaintext.as_chunks::<16>();
+        let mut res = Vec::with_capacity(plaintext.len());
+
+        /// xor the bytes of the mask with the bytes of chunk (big-endian, first byte is
+        /// most significant). If chunk has less than 16 bytes, the remaining bytes of mask will
+        /// be unused.
+        fn apply_mask_to_chunk(mask: u128, chunk: &[u8], res: &mut Vec<u8>) {
+            for (i, byte) in chunk.iter().enumerate() {
+                let masking_byte = (mask >> (120 - 8 * i)) & 0xff;
+                let cipher_byte = (*byte) ^ (masking_byte as u8);
+                res.push(cipher_byte);
+            }
+        }
+
+        // first block is encrypt with `counter0 + 1`
+        let mut counter = counter0 + 1;
+
+        for chunk in chunks {
+            let mask = aes_encrypt(counter, key);
+            counter += 1;
+            apply_mask_to_chunk(mask, chunk, &mut res);
+        }
+
+        let mask = aes_encrypt(counter, key);
+        apply_mask_to_chunk(mask, remainder, &mut res);
+
+        res
+    }
 }
 
 impl ModeOfOperation for GCM {}
 
 impl AeadModeOfOperation for GCM {
-    fn encrypt<K: AESKey>(
-        &self,
-        key: &K,
-        plaintext: &[u128],
-        aad: Option<&[u128]>,
-    ) -> (Vec<u128>, u128) {
+    fn encrypt<K: AESKey>(&self, key: &K, plaintext: &[u8], aad: Option<&[u8]>) -> (Vec<u8>, u128) {
         let zeros: u128 = 0x0;
         // key dependant point H = E(0^128)
         let h = aes_encrypt(zeros, key);
@@ -111,7 +157,7 @@ impl AeadModeOfOperation for GCM {
 
         let masking_key = aes_encrypt(counter0, key);
 
-        let ciphertext = CTR::encrypt_with_initial(key, plaintext, counter0 + 1);
+        let ciphertext = GCM::encrypt_ctr(key, plaintext, counter0);
 
         let mut tag = Self::g_hash(h, aad.unwrap_or(&[]), ciphertext.as_slice());
         tag ^= masking_key;
@@ -122,10 +168,10 @@ impl AeadModeOfOperation for GCM {
     fn decrypt<K: AESKey>(
         &self,
         key: &K,
-        ciphertext: &[u128],
-        aad: Option<&[u128]>,
+        ciphertext: &[u8],
+        aad: Option<&[u8]>,
         tag: u128,
-    ) -> Result<Vec<u128>, AeadDecryptionTagMismatch> {
+    ) -> Result<Vec<u8>, AeadDecryptionTagMismatch> {
         // key dependant point H = E(0^128)
         let h = aes_encrypt(0, key);
         let counter0 = self.calculate_counter0(h);
@@ -138,7 +184,7 @@ impl AeadModeOfOperation for GCM {
         }
 
         // encryption and decryption are the same
-        let plaintext = CTR::encrypt_with_initial(key, ciphertext, counter0 + 1);
+        let plaintext = GCM::encrypt_ctr(key, ciphertext, counter0);
         Ok(plaintext)
     }
 }
@@ -149,172 +195,173 @@ mod tests {
     use crate::cryptography::mode_of_operation::gcm::GCM;
     use crate::cryptography::mode_of_operation::tests::{test_decrypt_aead, test_encrypt_aead};
     use crate::cryptography::mode_of_operation::AeadDecryptionTagMismatch;
-
     #[test]
     fn gcm_encrypt_128() {
         test_encrypt_aead::<AESKey128, GCM>(
             "af0918cd2a119a5853ebeadfc9cbdd8c",
-            "6a76d46d9170d484528f8ccf702469fe64106a49253224fd4f36b1eba9efc1edb980d1351a1963e39fba1043dfccb99b5fe30a10183707253fe53e4626e67aa0cd14b354a243ee88846a084115bc1f4e65e9a6dbed4527ab7da1a5a1783147882feecfa1e26637a745697cc56b42aa9010885aaccc8192610e14ca71b76f201f",
-            Some("9f4271260f481d8c80e70e7fd07296ed"),
-            "506fe244640dc5e2eb0a140867381fdd23cdc3f2c24d92f6ff4e49dcdf099eebe5c1277396e797be9e6f2455acf6f44a9728028bd9ff5b8a2ee4a56db40168f0bab2b7dabfeeba979958a02ba745caf29d1394289fa0a29cec3468b91dda573dc41ebc4687245b7ca3d3c63531e875ae01dbfd854dd3de52c357dc95365a041c",
-            "0fe3a44da7eae9798d24197259800757",
-            GCM::new(vec![0x7e, 0xf8, 0x35, 0x06, 0xe1, 0xd0, 0xd4, 0xc2, 0xf5, 0x64, 0x61, 0xb2])
+            "76d46d9170d484528f8ccf702469fe64106a49253224fd4f36b1eba9efc1edb980d1351a1963e39fba1043dfccb99b5fe30a10183707253fe53e4626e67aa0cd",
+            Some("ee88846a084115bc1f4e65e9a6dbed4527ab7da1a5a1783147882feecfa1e266"),
+            "7fb6a3c0648b543588a1ae542e3dfca4e32b3b8ebf0cf935522e5f3bb29bc94d035d827208111720d14e1d54581ec1a8a6cc816f13c5cedd52ea1157b70ac815",
+            "e5d4f631df02d08546dae6b05acc3fe1",
+            GCM::new(vec![0xb3, 0x54, 0xa2])
         );
         test_encrypt_aead::<AESKey128, GCM>(
-            "32eb9bb88ccb57151f64edc0f02ac1f2",
-            "e68e10cdaf12f2dbb2b5c177c123fb897cdb94b588dab4561f616280409ec77c3dcad10dc72817f14901b3ed12a4ab2246301c4ae4c2345df49296017c1b8c4f925e031e8b674a938c4ff363bd437a64a902867efd92290ab8c52654e2aaa6d4979afd35755963534e12660dff23bf5432595c2acdcc7d704b56256a453b5624",
-            Some("5f7da7f9b6042bdbc1e941c6061916b6312de67c4bf4a21c2493a96f1819f1755b85f8cd38ea3b814b4f2a5c86ecfc0e"),
-            "f8a8228331e3eab4586440387cdbfbc0323641776e7dd2747863c555e404c0af879696ce4bee33ba7a5305e0428505052256a3f68f6a5b64e8680213e158e9ab9f1ec7fa220c000c025b8b705a67d79d265bd9ca65a51ef05ae1203ec16b0c620cd38c17ccb6079709a46ca809cfa4a4d9df19d43c5f858afa53993645dc0443",
-            "440f952e4bac13d8eefa6ccf8bb0e6fa",
-            GCM::new(vec![0xac, 0xd4, 0xe5, 0x5d])
+            "37a745697cc56b42aa9010885aaccc81",
+            "0e14ca71b76f201fb05d7ef83506e1d0d4c2f56461b2eb3e9f4271260f481d8c80e70e7fd07296ed32eb9bb88ccb57151f64edc0f02ac1f2e68e10cdaf12f2db",
+            Some("9ec77c3dcad10dc72817f14901b3ed12a4ab2246301c4ae4c2345df49296017c"),
+            "621511a2a62ec78309852bcf3ca04529b0f6a25eaf16124b914839ece5b05e571466a97ac5d51595528daf0b709a1c2943bc41915fcd3ff033efce96c518418f",
+            "eedf6f82d61b019f11eb4059348e52bc",
+            GCM::new(vec![0xc1, 0x23, 0xfb, 0x89, 0x7c, 0xdb, 0x94, 0xb5, 0x88, 0xda, 0xb4, 0x56, 0x1f, 0x61, 0x62])
         );
         test_encrypt_aead::<AESKey128, GCM>(
-            "71d5293f4c717f42c88119553bff7236",
-            "1b44218c8d6eba19a044cd1fa35e4cf5ce77f1c6085cf1a809411bf4ad7b1a4049a5f1f1ceb75789d59f18cd34f1e860ef430302cb6cd49d43a47337ff4212321c28bb4614f183695f6611efb1c32e48125a15f3bb05e8809a5602c3a3156bba31e358b78829fa661e40b1f3a8fd154bfb588941170faca33a4dae6a31290546",
-            Some("fa3db73bead0b0aab8e6bb64dbb3ff27605e50ccccae6f5dd304756c8b5212fc"),
-            "e301a1f814dedd87aac3050abc3c9b9a5bf26418e65794705b8190e7195189d0e89bca6702f5fe2166d239a997410f3fd5df6ca5925f7dddc1015c496b3b306ee3e3aea68b5cf0aee1322846bfd65da2699c4e6c3f7e174e306a9a9ba357d6904e174c3624198421c42add1c33554b6eb1b2f7483cb1852b06d6ee07b1863b14",
-            "3816e5939593ce40026c7bc4c91cfc15",
-            GCM::new(vec![0x7b, 0x73, 0x4e, 0x6e])
+            "1b8c4f925e031e8b674a938c4ff363bd",
+            "7a64a902867efd92290ab8c52654e2aaa6d4979afd35755963534e12660dff23bf5432595c2acdcc7d704b56256a453b5624ec19acd4e55de2765f7da7f9b604",
+            None,
+            "da1f525566eabc9c6f55b98bf5d758afb37ab8d48d99424987f458d9ab1201d8ee4f8dceb45e608277068a9578d7d01f0c217687481d9df369de508a65d1671e",
+            "c6c9e90d8781c75c382578493d72bde7",
+            GCM::new(vec![0xdb, 0xc1, 0xe9, 0x41, 0xc6, 0x06])
         );
     }
 
     #[test]
     fn gcm_encrypt_192() {
         test_encrypt_aead::<AESKey192, GCM>(
-            "e178f3084c59e5c6f2103cbe81cc92cb695b341119310095",
-            "2ea694a68d50c74be3f7e5023167dbfab93c02f21834192e57253cef25868d5f6392a2cee21fb928419f81f3c13e24d998949791db5579ce83fd2fe33b9f0fd7a3999d71b8bfd745fbb234844bb20d33e053d58e506fc6066732b664307ac083fb6c32e8ddd4b3699e9b67b0573d68510dd51760743176215e1bef972185286b",
-            Some("8a5148b3aa9ae28bb7a13c34a6c989965b9fcadaba7c02440bf0f830a6d249d5"),
-            "d7eeb360e8814970226d6d186a5492b5464d41fb288816f29d9381eb10c660aee7e089fd79f324c80a3beb94ac167d559dd403c9e6cfa2b5b984bd12b5f01d40bc076c09a8b859e821cd7afff23deae8aef02f7f62027b9ab0b6e76caffb34cb7deb0fa0680efb010e8ee177c0d0c87596785f9435367e221443bd99b8ceec1b",
-            "0364d6cb5601e7f29f6941961bee445c",
-            GCM::new(vec![0x8b, 0x66, 0x75])
+            "16b6312de67c4bf4a21c2493a96f1819f1755b85f8cd38ea",
+            "4b4f2a5c86ecfc0e71d5293f4c717f42c88119553bff72361b44218c8d6eba19a044cd1fa35e4cf5ce77f1c6085cf1a809411bf4ad7b1a4049a5f1f1ceb75789d59f18cd34",
+            Some("12321c28bb4614f183695f6611efb1c32e48125a15f3bb05e8809a5602c3a315"),
+            "0aa4b2c329d283a66ba89eb0d209e3d0678026dc94c893ea9c78c16be15db0293806b61ce29d41e1166ec89683fafc2d5e1d1902b99661063f34d55f5af6de8640656bb506",
+            "1d83a4390cbe8736137601bacbc0ac13",
+            GCM::new(vec![0xef, 0x43, 0x03, 0x02, 0xcb, 0x6c, 0xd4, 0x9d, 0x43, 0xa4, 0x73, 0x37, 0xff])
         );
         test_encrypt_aead::<AESKey192, GCM>(
-            "55de87f9a3ee6947f6917e8ec83bf406f9136863921bed35",
-            "ddb36206ab2bb82d9ae69f54115e6fdfc1b3ad6133759aa52799748c267e4859158f047c09428d11ad849a07a943c3d8361b5f19ef55354d6747dfb4bdcc7bdb79421240e821b7955bcc05b54ac443f1fc7d2e9ee065b40ef820d26c4ec400ec6aa3d36fc36b90c87d84c1ee8f0dd7fe5b767e89cd6aab6546d728a438817ef2",
-            Some("824be90bd607facb161411b8adef368d72fcd9a6fa205b056d106c9c53a6a630"),
-            "ab5b36eb9be7cb24be4413624d3d2172ec42b774ffd0973f91d3a83454f27820ac0bde38c77f3ebfd1defdc3f840ce34cc75354257bd87976c7d35986d6264a6611d4dfb544cda295ea4f6261b92813b5dcec918d26ea91a0fd6720750ccea47cdfee86b170139930df41aa99e182a8841ef86c4355429c23856ae54bb1cdc8a",
-            "38ec49e924a725dffedae50d1be45fae",
-            GCM::new(vec![0x69, 0x7e, 0x58, 0x0a, 0x24, 0x4f, 0xaf, 0x78, 0xce, 0x3f])
-        );
-        test_encrypt_aead::<AESKey192, GCM>(
-            "0f864bdd8668d848beb73a71412dd4a0cb7b08ba46f59b9f",
-            "ba4c4b7744318c60a5b7fbcd8812c10a6935aa3b7e5d2e6af3378d5a379b71c272253bc1aba2e0282e0287ab160e4ea2d5317f33eaa080f2d9b2407656c4793c672abccd5372e058a700a4703a94aa2e47d246d4d0186b20d293d393d0708016dc73cc5af43f3244d5e19364f0c8b8022ddaef37c071d49403a8d62d263a7ee8",
+            "6bba31e358b78829fa661e40b1f3a8fd154bfb588941170f",
+            "ae6a312905461c7b734e6e874afa3db73bead0b0aab8e6bb64dbb3ff27605e50ccccae6f5dd304756c8b52",
             None,
-            "fd7afdb88fe47b2bed5f473a734b842c981a0bae6e2ff6500dbcd78a4cdef23e55dddaa11b24139605604b162d610d88a78d2548deea8716183c49ca3105f452a29aa6f3950e039c44d7a5de9dc461c0a77e007fb7bd4b74844024459ef46cbd0d7c99b76ea71247bb2121c33971fea9ce25186485243dec046fbf5863e9a5f7",
-            "06ee14a11045933af77c14622e441d9c",
-            GCM::new(vec![0x52, 0x72, 0x7a, 0x53, 0x81, 0x65, 0x81])
+            "3525d57ac3948165d0983f897b31bdb5551a66895dd1ef210cb3faa1b7200f418fe9664a3f5fd0f8ef08fb",
+            "00df4394b496466a4a24cefb0ebf1e5e",
+            GCM::new(vec![0xfc, 0xe1, 0x78])
+        );
+        test_encrypt_aead::<AESKey192, GCM>(
+            "4c59e5c6f2103cbe81cc92cb695b3411193100952ea694a6",
+            "c74be3f7e5023167dbfab93c02f21834192e57253cef25868d5f6392a2cee21fb928419f81f3c13e24d998949791db5579ce83fd2fe33b9f0fd7a3999d71b8bf",
+            Some("d58e506fc6066732b664307ac083fb6c32e8ddd4b3699e9b67b0573d68510dd5"),
+            "a0726bb141ae2d51cba693a7c999f69f19c0c053789a493a0080535acf8a4b23820ad5e096d8eb01b6d9cc3c3d4f4b136c678d9b910471c60bbe1e0a873db273",
+            "aae18b4f230a3a2e9b67b1d41ff3b2cf",
+            GCM::new(vec![0xfb, 0xb2, 0x34, 0x84, 0x4b, 0xb2, 0x0d, 0x33, 0xe0])
         );
     }
 
     #[test]
     fn gcm_encrypt_256() {
         test_encrypt_aead::<AESKey256, GCM>(
-            "f8c1284e24136e8516cdbab418b4a8fa458530071be436bbcfdd6a50c24e8507",
-            "15757782cec64529b489813247c1e154ec9a97c78db6fa365c726411e602b2ec4bf3a29d96504bbd57533eace047679b9b82db5168cecd44b814842dfea6be3b9070ca5d590ce3d9aed96fc29860ea5cdd2c8936ed2c1a8c8e5a1ac219f309e086f8faf1e3b5cca8bb055d60be86c960a1fa2066b1f01c8c878fbcb7a1fb93b6",
-            Some("71a5111793a805bea531c51a701f110f02ec24c34338d9bc43647e2078ad47d19146e6393f26f60a1b4e7165f64d53d9"),
-            "723f8ed9ba964661ec0f804cbca56fff025a7cd332166cf420e85480f04227965aedea3b4653b5029045f08ca5cf5ccf90a5a80a15afc307ef30a27820dc17aa87afc47de8ba12eaa73ea4f5ada220cea939fd2dd06cd399e730b9c9e35b33b866f89eb85f978dce495c1311018ab5e0b975b5ed279aacd5f12eb9891b5005d2",
-            "883005160a3a45e40e0343d742d0e99a",
-            GCM::new(vec![0xd8, 0xc3, 0xa7, 0xfd, 0xb2, 0x17, 0x50, 0xb9, 0x54])
+            "1760743176215e1bef972185286b108b6675cb86f0f3f04d8a5148b3aa9ae28b",
+            "a6c989965b9fcadaba7c02440bf0f830a6d249d555de87f9a3ee6947f6917e",
+            Some("ddb36206ab2bb82d9ae69f54115e6fdf"),
+            "e346b645fd707c6e14f48957b40999d5363459598e8ba694857dddc6219c19",
+            "068385850aa5617c052d9d469d1365c3",
+            GCM::new(vec![0xf4, 0x06, 0xf9, 0x13, 0x68, 0x63, 0x92, 0x1b]),
         );
         test_encrypt_aead::<AESKey256, GCM>(
-            "04a3e09eebfdb52f36bdc9433049bd9af2210571527383d37fcc15374a5721cc",
-            "d68cd7a7c8104e01979159d014a474fbce3009bf1eee14ebe5c3fd422bb610f164a4dd43e3180c022cebbc6fd8fe4610d63e49a5e1c8e28566005f02ada9f02ffd069665530bb4756bf0d46b4d6f4b82f0458d7cddee1a42c89a99d00647e2a8b3637a0a2d082b61a86ba66fd5f16b85889b3b295fc9ff48f49bf0049ccbde42",
-            Some("74a64771b6966d49a72bbe69e12061682a223e0617453a33172e82c7301c06fd2f97187189bb7c3cc7b1d6983e807f59"),
-            "16a0bb775f3f99ccd6e3f96c88b465fa2fe1f326c112c090841203d12e1574615a2449f4a211cc8bc438b73f8456f9a67d07bee3a1f1b9bf74e60e8440c8c94c70a0b4c5b4e6f32493ec79b80c1bad8a17dfaa120e1f9902648bef2576893012f4a890c761ca22ce4f3973197f3cad5608f9013d2e687a74fe7c290542b1163d",
-            "d0bae226aaf74cbc8065155bedc7a899",
-            GCM::new(vec![0x17, 0xa9, 0x00, 0xc6, 0xdc, 0x64, 0x10, 0x90])
+            "c1b3ad6133759aa52799748c267e4859158f047c09428d11ad849a07a943c3d8",
+            "5f19ef55354d6747dfb4bdcc7bdb79421240",
+            Some("c443f1fc7d2e9ee065b40ef820d26c4ec400ec6aa3d36fc36b90c87d84c1ee8f"),
+            "7f0fa0af2fcfb44cdb89e6f5862205e19177",
+            "aa209759c42c69152c59af0362e185f2",
+            GCM::new(vec![0xb7, 0x95, 0x5b, 0xcc, 0x05]),
         );
         test_encrypt_aead::<AESKey256, GCM>(
-            "ed1227b68d80a7ad42ea98904a41d47c4cc8b4e119b0686cc76da471cd8bc545",
-            "68e2544398cbe855b3ad61b11b69a5d6a77c0913bdc7ad45b37f37d7cc2795b6ea90601b7a4651896dfb58ff1cbea687424f48428e3034eba26a7c33b028714470a8bde43233b2857341d2301002b2214f009acefe758afa9280a89719a36cd962d9cc7f285f5a33897f9615c77fad3a965740eb7e2b74a4a403f62d71be55d0",
-            Some("42546f34d4e13e6cd859e023b434d090"),
-            "65c94a281220735529c03941a4a6822004a42befa51f1cdf453ff1851535af463bc410bd0fd1baf8f09dc4ce6fae9154cddcc466bc6df3e1f660f18784847192fcc41dcb66e1df97df9451dede2ebe9d3aba7175ab8a9b189d965fd0138cf76834117ec5c5de6986c1c74dcb533b3343ed9e6cdb4bbc265dce743604333248ee",
-            "bdcc44e73efaa146bc8df1fbf33c9d4f",
-            GCM::new(vec![0x2b, 0x6f, 0xd6, 0x8c, 0x25, 0x45, 0x1e, 0x20, 0x7b])
+            "0dd7fe5b767e89cd6aab6546d728a438817ef2ae49697e580a244faf78ce3f4d",
+            "e90bd607facb161411b8adef368d72fcd9a6fa205b056d106c9c53a6a6300f864bdd8668d848beb73a71412dd4a0cb7b08ba46f59b9fba4c4b7744318c60a5b7",
+            Some("aa3b7e5d2e6af3378d5a379b71c27225"),
+            "e19f4603eeebc3fb5490a4f141bd74a59be8dceff9d10ca374cb164db9f776d8d85c8e8b0d206339eed64f44d0a5917917e29627aed9886bfa9a5f0952bc67a7",
+            "186e07dce85fc2b10a049d3a2146e755",
+            GCM::new(vec![0xc1, 0x0a, 0x69])
         );
     }
 
     #[test]
     fn gcm_decrypt_128() {
         test_decrypt_aead::<AESKey128, GCM>(
-            "d343856d9807ba7ec8dd675eaf74ae79",
-            "9f9e849ccadf0030b85c7cbb831f59234bc9539e7882af407c6f0c0551261a9873c0c3bebe1a1c43fb725012e0d8e066217cb396b214f9dc960ca4231ce763e42e31ee05b65bb0e12f2276ab7fa2333cf16f456578c03cb2a1323c787e5d11ec38afedaf0c9cfcb55d251b4d29758aa3b05dfc4e2771e4dd20d54549b67341d9",
-            Some("cf8e8c78d02b6b473dc60fb0a204dc55596f396435f93a3c56ebb1426640c906eaa92aaf62897b0cef284d495ccb8f16"),
-            Ok("eb25d190f10d7cbb3c0fda9b53455c5ffbfbd375522486ef04045c557fb70215add01c323ee23f22a4ca047621d8f13ea6763525906046311b18d518d44c3c29fbca4c5f1bf9c9fd91e243498ce2020dc86187062b59ee972596ef3d4f1873987f5cc47cbe8f876383640a7badce216a550ae7aba2cacd86b5c6863f4b909a64"),
-            "a3dbd8d9aeaeb0f331937557ccf754b8",
-            GCM::new(vec![0xde, 0xff, 0x7e, 0x9a, 0x98])
+            "3bc1aba2e0282e0287ab160e4ea2d531",
+            "044b96fda4a524240ff2a8e774a74afa8e4379c03711283a3c94a2be8889bc5a049d71a9f206e26aa43848f059f50bae6009607ea6e85387343ff167e329e89a",
+            Some("263a7ee88d3252727a5381658106f8c1"),
+            Ok("33eaa080f2d9b2407656c4793c672abccd5372e058a700a4703a94aa2e47d246d4d0186b20d293d393d0708016dc73cc5af43f3244d5e19364f0c8b8022ddaef"),
+            "00b55151e1e7817f5cea60f81cf6bf85",
+            GCM::new(vec![0xc0, 0x71, 0xd4, 0x94, 0x03, 0xa8, 0xd6])
         );
         test_decrypt_aead::<AESKey128, GCM>(
-            "9262d757517971375db3799c714aec53",
-            "ce8d7e4d5338986a2c81ef1cd89e954c445c95bb7974047937a1555839cbf4da1597bb15215a3223deefd8ce10c5e4814a1dc7b956d9fc832630fc29cd0bf08b2b3e6e9914a225989aee46a695a97f68641968f14b14973d4349a7c981a2cef822b53ff85377fa2ec43f7319225e56327e176d41342391839a856d3830d9631d",
-            Some("50f7fa895795bc2a985e653968ece4b0"),
-            Ok("1ff48a39ca9aba795ae376e07c07692cc73ae67d737ff04a7472c020c858c382cf0c73ff6af2b67333eaf17e5b143cf45b9112a12a99b84f0b5a48604fe3c99fd852bcb0fb8d53be18fb0f70468791e4ff3d0b2764fc0c99ac992dd062fcc7cdeca895183b4e1e31a71fdd7c72c8f9158a53e4c4ca5b35e44ce227224186d794"),
-            "dd8eebd74633f0016076c0e4b2229e73",
-            GCM::new(vec![0xab, 0x96, 0xe9, 0x48, 0x04, 0xc5, 0x31, 0xae, 0xd4, 0x90, 0xc4, 0x76, 0x28, 0x73])
+            "284e24136e8516cdbab418b4a8fa4585",
+            "f89772489d524f93",
+            Some("47c1e154ec9a97c78db6fa365c726411"),
+            Ok("1be436bbcfdd6a50"),
+            "fa05e5c7c97cf21764a9a6816b9a8a0e",
+            GCM::new(vec![
+                0x85, 0x07, 0x15, 0x75, 0x77, 0x82, 0xce, 0xc6, 0x45, 0x29,
+            ]),
         );
         test_decrypt_aead::<AESKey128, GCM>(
-            "b990f6d0ffe088129512cfef0cf0db8f",
-            "cfe3af89b1ed59e08dab1683e9ac322f5e669721b21944f0c93def4ea272ce1f9bd614bb73e2d204a09a7fe29b2c4a608d434db69e434c15a290d2ba035fb3880acadb6e5616d1b479f140228a71e390b649f25147998f992a95f69f1878afcca58d933c2d668aa23a940b2fbed1ae696ff498edcac031f7a614aab7bb34460d",
-            None,
-            Ok("35b26f9f8183bc910f5974d6acd8c369e5b811ad977f279f4db53f3913980eddf0f27cf74219e98df4902cb2668c5238742e76feea3ed36c5ab1af00d817a3fb0b2d35cafe2d236a3e8c7b2f300effddb0e74aab7fc80f34af057a2914e0c0e3feedc8f36f6237f932d4bdb4b468a83c5494c6993eac326ceed0a7e5a9679c1a"),
-            "dd27913a225c3cd2a1e6895de907f3cd",
-            GCM::new(vec![0xd3, 0xe5, 0x9b, 0x30, 0xe2, 0x3b, 0xf4, 0x27, 0x0f, 0xd4])
+            "e602b2ec4bf3a29d96504bbd57533eac",
+            "83e9b26272fe2d77eab1338152ba3541845e87357bb62158a99e5c288f45d550a5cba2780a2e41051fc2243ccac6b85213540c9cb72ef8341272867bd17e8618",
+            Some("d8c3a7fdb21750b9546a71a5111793a805bea531c51a701f110f02ec24c34338"),
+            Ok("679b9b82db5168cecd44b814842dfea6be3b9070ca5d590ce3d9aed96fc29860ea5cdd2c8936ed2c1a8c8e5a1ac219f309e086f8faf1e3b5cca8bb055d60be86"),
+            "77b78945720359aae97b18444708ca51",
+            GCM::new(vec![0xa1, 0xfa, 0x20, 0x66, 0xb1, 0xf0, 0x1c, 0x8c, 0x87, 0x8f, 0xbc, 0xb7, 0xa1])
         );
     }
 
     #[test]
     fn gcm_decrypt_192() {
         test_decrypt_aead::<AESKey192, GCM>(
-            "b117ca483924cfbcbe086375c2184a8f6f39dc76ef83f081",
-            "3923326c58db314bfb54fee4e77562e04d4218ddae49b49eb9f87a8e002df23fb40f96dac3a4c5cecf7706b2da31c7b1844802cce705285ec2869b0441bbd0938540a36fded010431be816549d87397967120b3a6ffe004b1ee37cb4e82197b11bcb2aaa9a2caf34bea62217b6dac836a6761d7a9a137351055c31738cb67eca",
-            Some("b599c3ae78af08ea41abd7b52c965013768d8e337cea5264ba4eb33502fb0335e6f6ff1101b908f730884ec043ac616b"),
-            Ok("bdd74138d0525da6a2ad0ab6de4f0194e93fedb7539cc883f2d10ee9e493a818d2146a5e2363169c77f4dddf22224e41de9b103e4031e0533379ec539cf28c70a944dce7aa802b0ae4edcfc6caeddf5559d5fc195d01302678edfb3cac8f3fb4b4c382ab29a7bd5ef9f6686e47f452e70d02483fec0bc3b4624b1cd2068333cd"),
-            "62049505b2801f104e1def8a553a771e",
-            GCM::new(vec![0x12, 0x9c, 0xc9, 0x4a, 0x5a, 0xd9, 0x3e, 0xc9, 0xba, 0x3f, 0xe3])
+            "d9bc43647e2078ad47d19146e6393f26f60a1b4e7165f64d",
+            "82d0a5f94761830204ef4dabf17986305ea75c48b6acfbcc0091c16aebf115c4aba0febc871ec891dcff547424848e95a7adccd7eae5a24f3fc27419a90e14af",
+            Some("10d63e49a5e1c8e28566005f02ada9f02ffd069665530bb4756bf0d46b4d6f4b"),
+            Ok("d904a3e09eebfdb52f36bdc9433049bd9af2210571527383d37fcc15374a5721ccd68cd7a7c8104e01979159d014a474fbce3009bf1eee14ebe5c3fd422bb610"),
+            "92aadfb2c9c72ee5b4ec8b77a45fec25",
+            GCM::new(vec![0xa4, 0xdd, 0x43, 0xe3, 0x18, 0x0c, 0x02, 0x2c, 0xeb, 0xbc, 0x6f, 0xd8, 0xfe])
         );
         test_decrypt_aead::<AESKey192, GCM>(
-            "88c8f11845ac6095ece51830d83c2e5c4141591f2a5426e6",
-            "75d0008ceabf66a354e8c5400418ba4fb291129ddfc2ffcecd0c9b614e31ee05473e953c294d3a61551d14e9a015845c572ac44e00663f79d71a1e8cc1c788c34a1ad96f4f5bf470debc9ff9ae26dbe11ecbd8c86e24e00c81007a5a01bd2d2417843f04f2922575b725f5443322121b67e1684651d49dc5783c2baf856f4a8e",
-            Some("31c35ef8b325e736173782630d10b8f90a4380d44863b4b7279c6868201c830e"),
-            Ok("9f333e925c5fe284dd8bcf16c364e1fa1b783b0d603a7f6b09bece8a638484a55f6154f1f066727ca88eb1a3c9660a864143ab4c2f5351dd7d6a4f91d551e27329701413fcfba07afcd951b49f425c2d18cbf7c2ec4f5625f5a388c725a385b46e978e86b0ff4df55f0334de2c1aa4e2f90b80d4c2d3ba7ba2957eea0eba1ff5"),
-            "71543c73d4423adcbaafffb0d4ce2362",
-            GCM::new(vec![0x55, 0x25, 0x03, 0xb8, 0xb9, 0x1f, 0x66, 0xe1, 0x03, 0xe2, 0xc6, 0x5b, 0x55, 0x4c, 0x3d, 0x4e])
+            "82f0458d7cddee1a42c89a99d00647e2a8b3637a0a2d082b",
+            "40dc7721b0adb3b0f657ae9bab6f96ffbf3d869e5da33cd9dc805a469c8fbd78281237083e95e01e3cb9a5fb8f3c831e494c31e0a00731a0c2175ff4df1fe0b7",
+            None,
+            Ok("a86ba66fd5f16b85889b3b295fc9ff48f49bf0049ccbde42da3d17a900c6dc6410906c74a64771b6966d49a72bbe69e12061682a223e0617453a33172e82c730"),
+            "4fe2369caec9188e111507a4e9f0ca29",
+            GCM::new(vec![0x06, 0xfd, 0x2f, 0x97])
         );
         test_decrypt_aead::<AESKey192, GCM>(
-            "40577c42306c36f26a309ab2a0cae665f91978958ea723ab",
-            "a87e73816cbaa97b649ed2f38a29011ef9dc688567170d0898fc2d0132be8ce81e943cf5e280a661dfbdd3648b270a2df68845b19ac3470ec90458970a4bb8b587ad45606d256c13a9d20c539dcc4bb105deec350e734eba75a962df7b437c97114417026fa23aba1f356d08cf311a45a231d3d6e87511613a57db35e11b4346",
-            Some("b3049fde22efce4e499eda9222658367a9384cc2e678d6461144624abfd632fd"),
-            Ok("c5105751b2a3be0c3b92dea9ea6b5ff27060cfb44e555a62db1196e7ecf2c50606b62b4e0dc03c605d2524b8b19d49ca3d7dee2b89aa3749f6407ea3e7d01ac7473c630117d0513feb250a4d33483b24745076d4b0962dafda1ebab0516ed70cf382cd1ab2a8dd0c51e12dc3914c683f515fdceaab4161e89e5195d5612c152c"),
-            "5a43e961b6050b62a204dcbda6611f94",
-            GCM::new(vec![0xef, 0xa0, 0x87, 0x64, 0x61, 0xfa, 0x9f, 0x6c, 0x11])
+            "7189bb7c3cc7b1d6983e807f59ed1227b68d80a7ad42ea98",
+            "8a82fa60174175236bb07a18432b96f60cb0ec286b683a5a1db6db1c012bca32ccd06b1ab15cb258d209787c53a50c98943e51d4817be52493d59e2cbd98153e",
+            Some("33b028714470a8bde43233b2857341d2301002b2214f009acefe758afa9280a89719a36cd962d9cc7f285f5a33897f96"),
+            Ok("41d47c4cc8b4e119b0686cc76da471cd8bc54568e2544398cbe855b3ad61b11b69a5d6a77c0913bdc7ad45b37f37d7cc2795b6ea90601b7a4651896dfb58ff1c"),
+            "f03016e3699a9138828cc7d8af36ff14",
+            GCM::new(vec![0x4f, 0x48, 0x42, 0x8e, 0x30, 0x34, 0xeb, 0xa2, 0x6a])
         );
     }
 
     #[test]
     fn gcm_decrypt_256() {
         test_decrypt_aead::<AESKey256, GCM>(
-            "e412a1dee07e8ed97ceac3b815a8f40133801892f66eb161ec4c14d8c33a805d",
-            "6ead46907959670059baee48a9570c92dfe024317f32d9eb8daf70f3206fa96ad4fcedd2cf7f04d2a07c972fb8abbba33dddfcf0d4abfbbf9bbb1cec8626982b063129251b9fa4735c1d6d53fcd25f9a4c5d7e95940e749c1519cd5f844e641e42adc2a68513eeb358c89d274e84ff364affc57ff058711662df3078770539db",
-            Some("93055d01fbb7b9c15bfb68322cbbb20eca997c40a81180c9ae5dd820659ee5e5e13759e386ec63d279cc858825a2e25d"),
-            Ok("b726f6a64938d756026c5058e79951378862dd160d65b3a531deca33491ef612af266e6d772b22f4638ad442361cc6f97d9e9c7017d0ea08b552a127a44e2001bd9336a04efdde95c40c5e5c1fcaace6034cd43cebbfa543fecd9a10007da7e140c958910e3dcb27a3f0866f22d7e8f29bfc5dd2c0f7b528da4759c44555ca7c"),
-            "ba1d593885ee130527d651f3b364d47a",
-            GCM::new(vec![0x0a, 0x61, 0xb0, 0x53, 0x1a, 0x2f, 0x59, 0x0c, 0xbc, 0x06])
+            "15c77fad3a965740eb7e2b74a4a403f62d71be55d0aa442b6fd68c25451e207b",
+            "680e50ea0d89e5a0b132cbf7853860afaabdedf2949220a56ab0f7f82f9f3206c6ac66ae907d",
+            Some("522486ef04045c557fb70215add01c323ee23f22a4ca047621d8f13ea6763525906046311b18d518d44c3c29fbca4c5f"),
+            Ok("546f34d4e13e6cd859e023b434d090d343856d9807ba7ec8dd675eaf74ae79eb25d190f10d7c"),
+            "b1a8e8ae33ebed6fb8781617e1cc3ebb",
+            GCM::new(vec![0x0f, 0xda, 0x9b, 0x53, 0x45, 0x5c, 0x5f, 0xfb])
         );
         test_decrypt_aead::<AESKey256, GCM>(
-            "978c7610279c7836f9b1998befda76a310865282482d369c75c4ec8b688c4b41",
-            "5357b6a78d886f766d844fc38f5664bc3c2c24e1bd050a6af2d1ddf72ee1d8ef5092f5f468794b5e7ba8bd446339f21ff6dfa7424b9794958410439f52db901db5a0d7831a37da5319ccb7078023dac05b6b03fcf9b9a1fc50532a4a31394857d13f49777ed285c521c459a8fe3227bbe0e3424edb974be1712393af153e62bb",
-            Some("31bdec803c5a95df26eb1aa9fc5666e06a4feeac825cb3827a7961540b4cf7e9c6ca71d37cb93d5b3e071557fb9d2d76"),
-            Ok("e794dc1020b9ef7c29fa5c0539768b42d2354698125858d20f76316f3870754e627491b2c00531f0cf04b19f38cf8cf523152f3939c19236ec46ff561f7ebc7bdcc11b811b2894e7c2aec1394e6336eac1d32435b17cb57378522a2be102053378b022ec1260897720fd935bbef7cd705ccd196b2a5c5d8e474895229a266095"),
-            "46c546487530f86f7f236074f180fd6f",
-            GCM::new(vec![0x90, 0x63, 0x9b, 0x2b])
+            "1bf9c9fd91e243498ce2020dc86187062b59ee972596ef3d4f1873987f5cc47c",
+            "35c34af929b6306b0215c1d6b149cc154426d703fbdb7e92a2198dc1a0a6dc05c7bdf88e6f9bb2d033d1b7a795047d00a667a299e805d39e32607ded708d4238",
+            Some("af62897b0cef284d495ccb8f169262d7"),
+            Ok("83640a7badce216a550ae7aba2cacd86b5c6863f4b909a64aedd22deff7e9a98e771cf8e8c78d02b6b473dc60fb0a204dc55596f396435f93a3c56ebb1426640"),
+            "d75ea2365d2223c13d7af0700ec7d81c",
+            GCM::new(vec![0xea])
         );
         test_decrypt_aead::<AESKey256, GCM>(
-            "fc786aa0854197587a63a473859dd81c98838f3fff2f4edf23dcf8d782698019",
-            "ab4ad5378e9474ced007d0676a04e72ebc2c922edef2dc82735b8e6a0e5ded8cbe881180e1f9296d4ad59688615e6bbeeb254166046dea91a98d5dfcabcbbbe2edd4101e4d0ec574135a23dee4d01309340dcb10a82815cf3ef5ba3a3887e60436afb70924094964175f2703fa84578ae1e3ba02c27695d9dfe377cb984a1204",
-            Some("80bebcdbdfe0b32317aebe7016d0c83f"),
-            Ok("17c841a2a8312afa677a8f64ece373a4aa5689d435515e841b966b9bd350fdd648a3a5d3ae6aa8057a7f36b32b3e59f77d203b293f6049a31856ba6ae78697078deac8fe767e428668d7b21791cf242c894993151c489252ceffbfe05a7df8f2863cb9b72981de83bf5c05d57a8d71856cdf72e8f706fcf9eb883c50bd7dba72"),
-            "acdd681770c41d8057e163a71593cba0",
-            GCM::new(vec![0x3a, 0xa5, 0x2c, 0xf7, 0x3c, 0x3a, 0x6f, 0x1c, 0xf6, 0x94, 0x27, 0x4e, 0x8e, 0x9a])
+            "57517971375db3799c714aec531ff48a39ca9aba795ae376e07c07692cc73ae6",
+            "2aa3bdbfe753f7c85b372bb3772412ea24a2884623f95fef7c39bde2a7f7522e689f27f694c28f63de3a8f7e81fb901498931a1b5f0735218dd5b5fa7a155ee2",
+            None,
+            Ok("737ff04a7472c020c858c382cf0c73ff6af2b67333eaf17e5b143cf45b9112a12a99b84f0b5a48604fe3c99fd852bcb0fb8d53be18fb0f70468791e4ff3d0b27"),
+            "a5f464bf0534ae8bfcc22ea3ad4245ee",
+            GCM::new(vec![0xfc, 0x0c, 0x99, 0xac, 0x99, 0x2d, 0xd0, 0x62, 0xfc, 0xc7, 0xcd, 0xec, 0xa8])
         );
     }
 

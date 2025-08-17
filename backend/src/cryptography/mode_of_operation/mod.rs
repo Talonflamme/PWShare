@@ -27,17 +27,17 @@ pub trait AeadModeOfOperation: ModeOfOperation {
     fn encrypt<K: AESKey>(
         &self,
         key: &K,
-        plaintext: &[u128],
-        aad: Option<&[u128]>,
-    ) -> (Vec<u128>, u128);
+        plaintext: &[u8],
+        aad: Option<&[u8]>,
+    ) -> (Vec<u8>, u128);
     /// Decrypts the ciphertext and authenticates that neither the ciphertext nor the AAD was
     /// changed. Returns a Result containing *only* the plaintext or an error if the tag does not
     /// match.
     fn decrypt<K: AESKey>(
         &self,
         key: &K,
-        ciphertext: &[u128],
-        aad: Option<&[u128]>,
+        ciphertext: &[u8],
+        aad: Option<&[u8]>,
         tag: u128,
-    ) -> Result<Vec<u128>, AeadDecryptionTagMismatch>;
+    ) -> Result<Vec<u8>, AeadDecryptionTagMismatch>;
 }
