@@ -1,7 +1,7 @@
-use crate::oaep::hashing::{HashFunction, Sha256};
-use crate::oaep::mgf1;
 use crate::cryptography::rng::rng;
 use crypto_bigint::rand_core::RngCore;
+use crate::cryptography::oaep::hashing::{HashFunction, Sha256};
+use crate::cryptography::oaep::mgf1;
 
 fn generate_random_seed(h_len: usize) -> Vec<u8> {
     let mut result = vec![0u8; h_len];
