@@ -1,4 +1,5 @@
-use crate::tls::record::Handshake;
+use super::protocol_version::ProtocolVersion;
+use super::Handshake;
 use std::fmt::{Debug, Formatter};
 use std::io;
 use std::io::{ErrorKind, Read};
@@ -32,8 +33,7 @@ impl TryFrom<u8> for ContentType {
 
 pub struct RecordHeader {
     pub content_type: ContentType,
-    pub version_major: u8,
-    pub version_minor: u8,
+    pub version: ProtocolVersion,
     pub length: u16,
 }
 
@@ -42,7 +42,7 @@ impl Debug for RecordHeader {
         write!(
             f,
             "{}, RecordHeader {{ length {:04x}, content-type: {:?} }}",
-            self.version_to_str(),
+            self.version,
             self.length,
             self.content_type
         )
@@ -50,14 +50,6 @@ impl Debug for RecordHeader {
 }
 
 impl RecordHeader {
-    fn version_to_str(&self) -> String {
-        if self.version_major != 3 || self.version_minor > 4 {
-            format!("Version {}.{}", self.version_major, self.version_minor)
-        } else {
-            format!("TLS 1.{}", self.version_minor - 1)
-        }
-    }
-
     pub fn read_from_stream(stream: &mut TcpStream) -> io::Result<RecordHeader> {
         let mut buf = [0u8; 5];
 
@@ -73,8 +65,10 @@ impl RecordHeader {
 
         Ok(RecordHeader {
             content_type: ContentType::try_from(buf[0])?,
-            version_major: buf[1],
-            version_minor: buf[2],
+            version: ProtocolVersion {
+                major: buf[1],
+                minor: buf[2],
+            },
             length: u16::from_be_bytes([buf[3], buf[4]]),
         })
     }
@@ -100,11 +94,11 @@ impl RecordHeader {
                 ),
             ));
         }
-        
+
         let mut buf = vec![0u8; self.length as usize];
-        
+
         let n = stream.read(buf.as_mut_slice())?;
-        
+
         Handshake::read_from_bytes(&buf[..n])
     }
 }
