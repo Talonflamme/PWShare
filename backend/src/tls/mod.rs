@@ -1,1 +1,2 @@
-mod tls_main;
+pub mod tls_main;
+mod record;
