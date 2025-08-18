@@ -1,5 +1,7 @@
-#[derive(Debug, PartialEq, Eq)]
+use pwshare_macros::ReadableFromStream;
+
+#[derive(Debug, PartialEq, Eq, ReadableFromStream)]
 pub struct Random {
-    pub gmt_unix_time: u32,
-    pub random_bytes: [u8; 28],
+    gmt_unix_time: u32,
+    random_bytes: [u8; 28],
 }

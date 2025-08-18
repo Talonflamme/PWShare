@@ -13,7 +13,7 @@ fn impl_readable_from_stream_trait(ast: DeriveInput) -> TokenStream {
                         let ident = f.ident.as_ref().unwrap();
                         let ty = &f.ty;
                         
-                        quote! { #ident: <#ty as ReadableFromStream>::read(stream)? }
+                        quote! { #ident: <#ty as crate::tls::ReadableFromStream>::read(stream)? }
                     });
                     quote! { #( #calls ),* }
                 }
@@ -21,7 +21,7 @@ fn impl_readable_from_stream_trait(ast: DeriveInput) -> TokenStream {
                     let calls = fields.unnamed.iter().enumerate().map(|(i, f)| {
                         let ty = &f.ty;
                         let idx = syn::Index::from(i);
-                        quote! { #idx: <#ty as ReadableFromStream>::read(stream)? }
+                        quote! { #idx: <#ty as crate::tls::ReadableFromStream>::read(stream)? }
                     });
                     quote! { #( #calls ),* }
                 }
@@ -38,7 +38,7 @@ fn impl_readable_from_stream_trait(ast: DeriveInput) -> TokenStream {
     };
 
     quote! {
-        impl ReadableFromStream for #name {
+        impl crate::tls::ReadableFromStream for #name {
             fn read(stream: &mut impl Iterator<Item=u8>) -> std::io::Result<#name> {
                 Ok(#name {
                     #body
