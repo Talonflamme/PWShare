@@ -1,8 +1,11 @@
-use std::fmt::{Display, Formatter};
+use crate::tls::record::readable_from_stream::ReadableFromStream;
+use pwshare_macros::ReadableFromStream;
+use std::fmt::{Debug, Display, Formatter};
 
+#[derive(ReadableFromStream)]
 pub struct ProtocolVersion {
     pub major: u8,
-    pub minor: u8
+    pub minor: u8,
 }
 
 impl Display for ProtocolVersion {
@@ -12,5 +15,11 @@ impl Display for ProtocolVersion {
         } else {
             write!(f, "TLS 1.{}", self.minor - 1)
         }
+    }
+}
+
+impl Debug for ProtocolVersion {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self, f)
     }
 }
