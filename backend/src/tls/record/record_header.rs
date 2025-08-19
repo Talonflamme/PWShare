@@ -16,23 +16,6 @@ pub enum ContentType {
     ApplicationData = 23,  // 0x17
 }
 
-impl TryFrom<u8> for ContentType {
-    type Error = io::Error;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            20 => Ok(ContentType::ChangeCipherSpec),
-            21 => Ok(ContentType::Alert),
-            22 => Ok(ContentType::Handshake),
-            23 => Ok(ContentType::ApplicationData),
-            _ => Err(io::Error::new(
-                ErrorKind::InvalidData,
-                format!("Content Type: {:02x} unexpected", value),
-            )),
-        }
-    }
-}
-
 #[derive(ReadableFromStream)]
 pub struct RecordHeader {
     pub content_type: ContentType,
