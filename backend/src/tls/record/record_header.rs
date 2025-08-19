@@ -1,12 +1,14 @@
 use super::protocol_version::ProtocolVersion;
 use super::Handshake;
+use crate::tls::ReadableFromStream;
+use pwshare_macros::ReadableFromStream;
 use std::fmt::{Debug, Formatter};
 use std::io;
 use std::io::{ErrorKind, Read};
 use std::net::TcpStream;
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, ReadableFromStream)]
 pub enum ContentType {
     ChangeCipherSpec = 20, // 0x14
     Alert = 21,            // 0x15
@@ -31,6 +33,7 @@ impl TryFrom<u8> for ContentType {
     }
 }
 
+#[derive(ReadableFromStream)]
 pub struct RecordHeader {
     pub content_type: ContentType,
     pub version: ProtocolVersion,
@@ -52,25 +55,9 @@ impl Debug for RecordHeader {
 impl RecordHeader {
     pub fn read_from_stream(stream: &mut TcpStream) -> io::Result<RecordHeader> {
         let mut buf = [0u8; 5];
-
         let n = stream.read(&mut buf)?;
-
-        if n != 5 {
-            // too few bytes
-            return Err(io::Error::new(
-                ErrorKind::UnexpectedEof,
-                format!("Expected 5 bytes, got {}", n),
-            ));
-        }
-
-        Ok(RecordHeader {
-            content_type: ContentType::try_from(buf[0])?,
-            version: ProtocolVersion {
-                major: buf[1],
-                minor: buf[2],
-            },
-            length: u16::from_be_bytes([buf[3], buf[4]]),
-        })
+        let mut iter = buf.iter().take(n).copied();
+        Self::read(&mut iter)
     }
 
     pub fn read_handshake_from_stream(&self, stream: &mut TcpStream) -> io::Result<Handshake> {

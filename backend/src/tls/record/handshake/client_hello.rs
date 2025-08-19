@@ -1,10 +1,17 @@
-use std::io::{Error, ErrorKind, Result};
+use crate::tls::record::cipher_suite::CipherSuite;
+use crate::tls::record::compression_method::CompressionMethod;
+use crate::tls::record::protocol_version::ProtocolVersion;
+use crate::tls::record::variable_length_vec::VariableLengthVec;
+use crate::tls::record::{Random, SessionID};
+use pwshare_macros::ReadableFromStream;
 
-#[derive(Debug)]
-pub struct ClientHello;
-
-impl ClientHello {
-    pub(super) fn new(bytes: &[u8]) -> Result<Self> {
-        todo!()
-    }
+#[derive(Debug, ReadableFromStream)]
+/// https://www.rfc-editor.org/rfc/rfc5246#section-7.4.1.2
+pub struct ClientHello {
+    client_version: ProtocolVersion,
+    random: Random,
+    session_id: SessionID,
+    cipher_suites: VariableLengthVec<CipherSuite, 2, 65534>, // 2^16-2
+    compression_methods: VariableLengthVec<CompressionMethod, 1, 255>, // 2^8-1
+    // TODO: extensions?
 }

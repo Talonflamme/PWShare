@@ -1,6 +1,3 @@
-use pwshare_macros::ReadableFromStream;
+use crate::tls::record::variable_length_vec::VariableLengthVec;
 
-#[derive(Debug, ReadableFromStream)]
-pub struct SessionID {
-    
-}
+pub type SessionID = VariableLengthVec<u8, 0, 32>;

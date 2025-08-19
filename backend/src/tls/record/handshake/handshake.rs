@@ -1,6 +1,5 @@
 use super::certificate_request::CertificateRequest;
 use super::certificate_verify::CertificateVerify;
-use super::client_certificate::ClientCertificate;
 use super::client_hello::ClientHello;
 use super::client_key_exchange::ClientKeyExchange;
 use super::finished::Finished;
@@ -9,11 +8,13 @@ use super::server_certificate::ServerCertificate;
 use super::server_hello::ServerHello;
 use super::server_hello_done::ServerHelloDone;
 use super::server_key_exchange::ServerKeyExchange;
+use crate::tls::ReadableFromStream;
+use pwshare_macros::ReadableFromStream;
 use std::fmt::Debug;
 use std::io::{self, ErrorKind, Result};
 
 #[repr(u8)]
-#[derive(Debug)]
+#[derive(Debug, ReadableFromStream)]
 pub enum HandshakeType {
     HelloRequest(HelloRequest) = 0,              // 0x00
     ClientHello(ClientHello) = 1,                // 0x01
@@ -42,36 +43,15 @@ impl Handshake {
         // since there is no u24 type in rust, the first byte of the u32 is 0.
         let length = u32::from_be_bytes([0x00, bytes[1], bytes[2], bytes[3]]);
 
-        let rem_bytes = &bytes[..length as usize];
+        // we need to do a bit of trickery here:
+        // our `read` expects first the msg_type (1 byte) followed by the actual
+        // content, but the `msg_type` is at bytes[0] followed by 3 bytes we need to ignore (length)
+        // and then the content. Therefore, we prepend the `msg_type` byte followed by the content
+        // to correctly parse it
+        let mut iter =
+            std::iter::once(bytes[0]).chain(bytes.iter().skip(4).take(length as usize).copied());
 
-        let typ = match bytes[0] {
-            0 => Ok(HandshakeType::HelloRequest(HelloRequest::new(rem_bytes)?)),
-            1 => Ok(HandshakeType::ClientHello(ClientHello::new(rem_bytes)?)),
-            2 => Ok(HandshakeType::ServerHello(ServerHello::new(rem_bytes)?)),
-            11 => Ok(HandshakeType::Certificate(ServerCertificate::new(
-                rem_bytes,
-            )?)),
-            12 => Ok(HandshakeType::ServerKeyExchange(ServerKeyExchange::new(
-                rem_bytes,
-            )?)),
-            13 => Ok(HandshakeType::CertificateRequest(CertificateRequest::new(
-                rem_bytes,
-            )?)),
-            14 => Ok(HandshakeType::ServerHelloDone(ServerHelloDone::new(
-                rem_bytes,
-            )?)),
-            15 => Ok(HandshakeType::CertificateVerify(CertificateVerify::new(
-                rem_bytes,
-            )?)),
-            16 => Ok(HandshakeType::ClientKeyExchange(ClientKeyExchange::new(
-                rem_bytes,
-            )?)),
-            20 => Ok(HandshakeType::Finished(Finished::new(rem_bytes)?)),
-            _ => Err(io::Error::new(
-                ErrorKind::InvalidData,
-                format!("Unexpected handshake type: {:02x}", bytes[0]),
-            )),
-        }?;
+        let typ = HandshakeType::read(&mut iter)?;
 
         Ok(Handshake {
             length,

@@ -1,10 +1,4 @@
-use std::io::{Error, ErrorKind, Result};
+use pwshare_macros::ReadableFromStream;
 
-#[derive(Debug)]
+#[derive(Debug, ReadableFromStream)]
 pub struct CertificateRequest;
-
-impl CertificateRequest {
-    pub(super) fn new(bytes: &[u8]) -> Result<Self> {
-        todo!()
-    }
-}

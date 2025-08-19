@@ -17,7 +17,7 @@ use std::ops::{Deref, DerefMut};
 ///
 /// Note: `MIN` and `MAX` are the length in bytes. This means, the number of elements
 /// that can be held the inner `Vec<T>` is calculated by `MAX / sizeof(T)`.
-pub(super) struct VariableLengthVec<T, const MIN: usize, const MAX: usize>(Vec<T>);
+pub struct VariableLengthVec<T, const MIN: usize, const MAX: usize>(Vec<T>);
 
 impl<T, const MIN: usize, const MAX: usize> Deref for VariableLengthVec<T, MIN, MAX> {
     type Target = Vec<T>;
