@@ -1,4 +1,5 @@
 use crate::tls::record::readable_from_stream::{unexpected_eof, ReadableFromStream};
+use std::fmt::{Debug, Formatter};
 use std::io::{Error, ErrorKind};
 use std::ops::{Deref, DerefMut};
 
@@ -37,7 +38,7 @@ where
     T: ReadableFromStream,
 {
     fn read(stream: &mut impl Iterator<Item = u8>) -> std::io::Result<Self> {
-        let length_bytes = (MAX as f64).log2().ceil() as usize;
+        let length_bytes = (MAX as f64).log(256.0).ceil() as usize;
 
         let mut buf = [0; size_of::<usize>()];
 
@@ -78,5 +79,14 @@ where
         }
 
         Ok(VariableLengthVec(res))
+    }
+}
+
+impl<T, const MIN: usize, const MAX: usize> Debug for VariableLengthVec<T, MIN, MAX>
+where
+    T: Debug,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
