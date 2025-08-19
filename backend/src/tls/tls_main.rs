@@ -1,11 +1,15 @@
+use crate::tls::record::{Handshake, RecordHeader};
 use std::io::{Read, Result};
 use std::net::{TcpListener, TcpStream};
-use crate::tls::record::{Handshake, RecordHeader};
+use std::time::Duration;
 
 // TODO: eventually, we need to separate errors from IO and errors in the bytes supplied, in which
 //  case we would send back an Error. Actually, we might even send it regardless.
 fn handle_client(mut stream: TcpStream) -> Result<()> {
     println!("Got stream from: {}", stream.peer_addr()?);
+
+    stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(10)))?;
 
     let header = RecordHeader::read_from_stream(&mut stream)?;
     let handshake = header.read_handshake_from_stream(&mut stream)?;
