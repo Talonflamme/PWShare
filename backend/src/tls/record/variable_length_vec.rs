@@ -46,44 +46,36 @@ where
     T: Debug + ReadableFromStream,
 {
     fn read(stream: &mut impl Iterator<Item = u8>) -> std::io::Result<Self> {
-        let length_bytes = (MAX as f64).log(256.0).ceil() as usize;
+        let amount_bytes_for_len = (MAX as f64).log(256.0).ceil() as usize;
 
         let mut buf = [0; size_of::<usize>()];
 
-        for i in 0..length_bytes {
+        for i in 0..amount_bytes_for_len {
             // big-endian, but at the end of the buffer
-            buf[size_of::<usize>() - length_bytes + i] = stream.next().ok_or(unexpected_eof!())?;
+            buf[size_of::<usize>() - amount_bytes_for_len + i] = stream.next().ok_or(unexpected_eof!())?;
         }
 
-        let length_bytes = usize::from_be_bytes(buf);
+        let length_in_bytes = usize::from_be_bytes(buf);
 
-        if length_bytes < MIN || length_bytes > MAX {
+        if length_in_bytes < MIN || length_in_bytes > MAX {
             return Err(Error::new(
                 ErrorKind::InvalidData,
                 format!(
                     "Length {} is oustide of permitted range: {}..={}",
-                    length_bytes, MIN, MAX
+                    length_in_bytes, MIN, MAX
                 ),
             ));
         }
 
-        if length_bytes % size_of::<T>() != 0 {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                format!(
-                    "Length {} (bytes) is not divisible by {} bytes (size of {})",
-                    length_bytes,
-                    size_of::<T>(),
-                    std::any::type_name::<T>()
-                ),
-            ));
-        }
+        // we can't really know beforehand, how many elements to allocate, because some
+        // values of T, such as VariableLenVec, have more dynamic sizes, where the amount
+        // of elements cannot be calculated
+        let mut res = Vec::new();
 
-        let length_elements = length_bytes / size_of::<T>();
-        let mut res = Vec::with_capacity(length_elements);
+        let mut take = stream.take(length_in_bytes).peekable();
 
-        for _ in 0..length_elements {
-            res.push(T::read(stream)?);
+        while take.peek().is_some() {
+            res.push(T::read(&mut take)?);
         }
 
         Ok(VariableLengthVec(res))
