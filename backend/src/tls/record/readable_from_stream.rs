@@ -1,5 +1,4 @@
 use std::io::Result;
-use std::mem::MaybeUninit;
 
 macro_rules! unexpected_eof {
     () => {

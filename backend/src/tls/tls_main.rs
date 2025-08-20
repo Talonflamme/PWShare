@@ -1,5 +1,5 @@
-use crate::tls::record::{Handshake, RecordHeader};
-use std::io::{Read, Result};
+use crate::tls::record::RecordHeader;
+use std::io::Result;
 use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
 
@@ -20,7 +20,7 @@ fn handle_client(mut stream: TcpStream) -> Result<()> {
     Ok(())
 }
 
-// Command to do a TLS handshake: openssl s_client -connect 127.0.0.1:4981 -tls1_2 -servername localhost -msg -state -cipher AES128-SHA256
+// Command to do a TLS handshake: openssl s_client -connect 127.0.0.1:4981 -tls1_2 -servername localhost -state -cipher AES128-SHA256 -trace -debug
 pub fn start_server() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:4981")?;
 
