@@ -1,9 +1,10 @@
 use crate::tls::record::variable_length_vec::VariableLengthVec;
-use pwshare_macros::ReadableFromStream;
+use crate::tls::ReadableFromStream;
+use pwshare_macros::{FromRepr, ReadableFromStream};
 use std::fmt::{Debug, Formatter};
 
 #[repr(u16)]
-#[derive(Debug, ReadableFromStream, Copy, Clone)]
+#[derive(Debug, FromRepr, Copy, Clone)]
 pub enum ExtensionType {
     ServerName = 0,
     ClientCertificateUrl = 2,
@@ -47,6 +48,20 @@ pub enum ExtensionType {
     EchOuterExtensions = 64768,
     EncryptedClientHello = 65037,
     RenegotiationInfo = 65281,
+    Unknown = 65535,
+}
+
+impl ReadableFromStream for ExtensionType {
+    fn read(stream: &mut impl Iterator<Item = u8>) -> std::io::Result<Self> {
+        let num_value: u16 = u16::read(stream)?;
+        let variant = Self::try_from(num_value);
+
+        if let Ok(v) = variant {
+            Ok(v)
+        } else {
+            Ok(Self::Unknown)
+        }
+    }
 }
 
 #[derive(ReadableFromStream)]
