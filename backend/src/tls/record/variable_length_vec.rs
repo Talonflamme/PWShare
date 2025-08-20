@@ -17,9 +17,14 @@ use std::ops::{Deref, DerefMut};
 ///
 /// Note: `MIN` and `MAX` are the length in bytes. This means, the number of elements
 /// that can be held the inner `Vec<T>` is calculated by `MAX / sizeof(T)`.
-pub struct VariableLengthVec<T, const MIN: usize, const MAX: usize>(Vec<T>);
+pub struct VariableLengthVec<T, const MIN: usize, const MAX: usize>(Vec<T>)
+where
+    T: Debug + ReadableFromStream;
 
-impl<T, const MIN: usize, const MAX: usize> Deref for VariableLengthVec<T, MIN, MAX> {
+impl<T, const MIN: usize, const MAX: usize> Deref for VariableLengthVec<T, MIN, MAX>
+where
+    T: Debug + ReadableFromStream,
+{
     type Target = Vec<T>;
 
     fn deref(&self) -> &Self::Target {
@@ -27,7 +32,10 @@ impl<T, const MIN: usize, const MAX: usize> Deref for VariableLengthVec<T, MIN, 
     }
 }
 
-impl<T, const MIN: usize, const MAX: usize> DerefMut for VariableLengthVec<T, MIN, MAX> {
+impl<T, const MIN: usize, const MAX: usize> DerefMut for VariableLengthVec<T, MIN, MAX>
+where
+    T: Debug + ReadableFromStream,
+{
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -35,7 +43,7 @@ impl<T, const MIN: usize, const MAX: usize> DerefMut for VariableLengthVec<T, MI
 
 impl<T, const MIN: usize, const MAX: usize> ReadableFromStream for VariableLengthVec<T, MIN, MAX>
 where
-    T: ReadableFromStream,
+    T: Debug + ReadableFromStream,
 {
     fn read(stream: &mut impl Iterator<Item = u8>) -> std::io::Result<Self> {
         let length_bytes = (MAX as f64).log(256.0).ceil() as usize;
@@ -84,7 +92,7 @@ where
 
 impl<T, const MIN: usize, const MAX: usize> Debug for VariableLengthVec<T, MIN, MAX>
 where
-    T: Debug,
+    T: Debug + ReadableFromStream,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
