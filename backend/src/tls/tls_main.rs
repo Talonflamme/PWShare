@@ -15,7 +15,7 @@ fn handle_client(mut stream: TcpStream) -> Result<()> {
     let handshake = header.read_handshake_from_stream(&mut stream)?;
 
     println!("{:?}", header);
-    println!("{:?}", handshake);
+    println!("{:#?}", handshake);
 
     Ok(())
 }

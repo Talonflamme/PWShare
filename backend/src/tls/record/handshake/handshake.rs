@@ -1,14 +1,12 @@
+use super::hello::{ClientHello, HelloRequest, ServerHello, ServerHelloDone};
 use super::{
-    CertificateRequest, CertificateVerify, ClientKeyExchange, Finished,
-    ServerCertificate, ServerKeyExchange,
-};
-use super::hello::{
-    ClientHello, HelloRequest, ServerHello, ServerHelloDone
+    CertificateRequest, CertificateVerify, ClientKeyExchange, Finished, ServerCertificate,
+    ServerKeyExchange,
 };
 use crate::tls::ReadableFromStream;
 use pwshare_macros::ReadableFromStream;
 use std::fmt::Debug;
-use std::io::{self, ErrorKind, Result};
+use std::io::Result;
 
 #[repr(u8)]
 #[derive(Debug, ReadableFromStream)]
@@ -33,20 +31,20 @@ pub struct Handshake {
     length: u32,
 }
 
-impl Handshake {
-    /// Reads the handshake from the supplied bytes.
-    pub fn read_from_bytes(bytes: &[u8]) -> Result<Handshake> {
+impl ReadableFromStream for Handshake {
+    fn read(stream: &mut impl Iterator<Item = u8>) -> Result<Self> {
+        let [bytes0, bytes1, bytes2, bytes3] = u32::read(stream)?.to_be_bytes();
+
         // in TLS, the length is u24
         // since there is no u24 type in rust, the first byte of the u32 is 0.
-        let length = u32::from_be_bytes([0x00, bytes[1], bytes[2], bytes[3]]);
+        let length = u32::from_be_bytes([0x00, bytes1, bytes2, bytes3]);
 
         // we need to do a bit of trickery here:
         // our `read` expects first the msg_type (1 byte) followed by the actual
         // content, but the `msg_type` is at bytes[0] followed by 3 bytes we need to ignore (length)
         // and then the content. Therefore, we prepend the `msg_type` byte followed by the content
         // to correctly parse it
-        let mut iter =
-            std::iter::once(bytes[0]).chain(bytes.iter().skip(4).take(length as usize).copied());
+        let mut iter = std::iter::once(bytes0).chain(stream.take(length as usize));
 
         let typ = HandshakeType::read(&mut iter)?;
 

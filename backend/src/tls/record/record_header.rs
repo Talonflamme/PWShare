@@ -68,7 +68,8 @@ impl RecordHeader {
         let mut buf = vec![0u8; self.length as usize];
 
         let n = stream.read(buf.as_mut_slice())?;
+        let mut iter = buf.into_iter().take(n);
 
-        Handshake::read_from_bytes(&buf[..n])
+        Handshake::read(&mut iter)
     }
 }
