@@ -65,58 +65,11 @@ pub struct OpaqueExtensionData {
 
 impl Debug for Extension {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let data: &dyn Debug = match &self.extension_type {
-            ExtensionType::ServerName(a) => &a.extension_data,
-            ExtensionType::ClientCertificateUrl(a) => &a.extension_data,
-            ExtensionType::TrustedCaKeys(a) => &a.extension_data,
-            ExtensionType::StatusRequest(a) => &a.extension_data,
-            ExtensionType::UserMapping(a) => &a.extension_data,
-            ExtensionType::SupportedGroups(a) => &a.extension_data,
-            ExtensionType::EcPointFormats(a) => &a.extension_data,
-            ExtensionType::SignatureAlgorithms(a) => &a.supported_signature_algorithms,
-            ExtensionType::UseSrtp(a) => &a.extension_data,
-            ExtensionType::Heartbeat(a) => &a.extension_data,
-            ExtensionType::ApplicationLayerProtocolNegotiation(a) => &a.extension_data,
-            ExtensionType::StatusRequestV2(a) => &a.extension_data,
-            ExtensionType::ClientCertificateType(a) => &a.extension_data,
-            ExtensionType::ServerCertificateType(a) => &a.extension_data,
-            ExtensionType::Padding(a) => &a.extension_data,
-            ExtensionType::EncryptThenMac(a) => &a.extension_data,
-            ExtensionType::ExtendedMainSecret(a) => &a.extension_data,
-            ExtensionType::TokenBinding(a) => &a.extension_data,
-            ExtensionType::CachedInfo(a) => &a.extension_data,
-            ExtensionType::CompressCertificate(a) => &a.extension_data,
-            ExtensionType::RecordSizeLimit(a) => &a.extension_data,
-            ExtensionType::DelegatedCredential(a) => &a.extension_data,
-            ExtensionType::SessionTicket(a) => &a.extension_data,
-            ExtensionType::SupportedEktCiphers(a) => &a.extension_data,
-            ExtensionType::PreSharedKey(a) => &a.extension_data,
-            ExtensionType::EarlyData(a) => &a.extension_data,
-            ExtensionType::SupportedVersions(a) => &a.extension_data,
-            ExtensionType::Cookie(a) => &a.extension_data,
-            ExtensionType::PskKeyExchangeModes(a) => &a.extension_data,
-            ExtensionType::CertificateAuthorities(a) => &a.extension_data,
-            ExtensionType::OidFilters(a) => &a.extension_data,
-            ExtensionType::PostHandshakeAuth(a) => &a.extension_data,
-            ExtensionType::SignatureAlgorithmsCert(a) => &a.extension_data,
-            ExtensionType::KeyShare(a) => &a.extension_data,
-            ExtensionType::TransparencyInfo(a) => &a.extension_data,
-            ExtensionType::ExternalIdHash(a) => &a.extension_data,
-            ExtensionType::ExternalSessionId(a) => &a.extension_data,
-            ExtensionType::QuicTransportParameters(a) => &a.extension_data,
-            ExtensionType::TicketRequest(a) => &a.extension_data,
-            ExtensionType::EchOuterExtensions(a) => &a.extension_data,
-            ExtensionType::EncryptedClientHello(a) => &a.extension_data,
-            ExtensionType::RenegotiationInfo(a) => &a.extension_data,
-            ExtensionType::Unknown(a) => &a.extension_data,
-        };
-
         write!(
             f,
-            "Extension {:?}({}) {{ {:?} }}",
+            "Extension {:?}({})",
             self.extension_type,
-            Into::<u16>::into(&self.extension_type),
-            data
+            Into::<u16>::into(&self.extension_type)
         )
     }
 }
