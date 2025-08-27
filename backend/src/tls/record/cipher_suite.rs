@@ -1,45 +1,87 @@
-pub type CipherSuite = [u8; 2];
+use pwshare_macros::FromRepr;
+use crate::tls::ReadableFromStream;
 
-// initial, must not be used as it does not protect any data
-pub const TLS_NULL_WITH_NULL_NULL: CipherSuite = [0x00, 0x00];
+#[repr(u16)]
+#[derive(Debug, FromRepr, Clone, Copy, PartialEq, Eq)]
+pub enum CipherSuite {
+    // initial, must not be used as it does not protect any data
+    TlsNullWithNullNull = 0x0000,
 
-// Server must provide RSA certificate that can be used for key exchange
-pub const TLS_RSA_WITH_NULL_MD5: CipherSuite = [0x00, 0x01];
-pub const TLS_RSA_WITH_NULL_SHA: CipherSuite = [0x00, 0x02];
-pub const TLS_RSA_WITH_NULL_SHA256: CipherSuite = [0x00, 0x3B];
-pub const TLS_RSA_WITH_RC4_128_MD5: CipherSuite = [0x00, 0x04];
-pub const TLS_RSA_WITH_RC4_128_SHA: CipherSuite = [0x00, 0x05];
-pub const TLS_RSA_WITH_3DES_EDE_CBC_SHA: CipherSuite = [0x00, 0x0A];
-pub const TLS_RSA_WITH_AES_128_CBC_SHA: CipherSuite = [0x00, 0x2f];
-pub const TLS_RSA_WITH_AES_128_CBC_SHA256: CipherSuite = [0x00, 0x3c];
-pub const TLS_RSA_WITH_AES_256_CBC_SHA256: CipherSuite = [0x00, 0x3d];
+    // Server must provide RSA certificate that can be used for key exchange
+    TlsRsaWithNullMd5 = 0x0001,
+    TlsRsaWithNullSha = 0x0002,
+    TlsRsaWithNullSha256 = 0x003B,
+    TlsRsaWithRc4128Md5 = 0x0004,
+    TlsRsaWithRc4128Sha = 0x0005,
+    TlsRsaWith3desEdeCbcSha = 0x000A,
+    TlsRsaWithAes128CbcSha = 0x002f,
+    TlsRsaWithAes256CbcSha = 0x0035,
+    TlsRsaWithAes128CbcSha256 = 0x003c,
+    TlsRsaWithAes256CbcSha256 = 0x003d,
 
-// Server-authenticated Diffie-Hellman
-pub const TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA: CipherSuite = [0x00, 0x0D];
-pub const TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA: CipherSuite = [0x00, 0x10];
-pub const TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA: CipherSuite = [0x00, 0x13];
-pub const TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA: CipherSuite = [0x00, 0x16];
-pub const TLS_DH_DSS_WITH_AES_128_CBC_SHA: CipherSuite = [0x00, 0x30];
-pub const TLS_DH_RSA_WITH_AES_128_CBC_SHA: CipherSuite = [0x00, 0x31];
-pub const TLS_DHE_DSS_WITH_AES_128_CBC_SHA: CipherSuite = [0x00, 0x32];
-pub const TLS_DHE_RSA_WITH_AES_128_CBC_SHA: CipherSuite = [0x00, 0x33];
-pub const TLS_DH_DSS_WITH_AES_256_CBC_SHA: CipherSuite = [0x00, 0x36];
-pub const TLS_DH_RSA_WITH_AES_256_CBC_SHA: CipherSuite = [0x00, 0x37];
-pub const TLS_DHE_DSS_WITH_AES_256_CBC_SHA: CipherSuite = [0x00, 0x38];
-pub const TLS_DHE_RSA_WITH_AES_256_CBC_SHA: CipherSuite = [0x00, 0x39];
-pub const TLS_DH_DSS_WITH_AES_128_CBC_SHA256: CipherSuite = [0x00, 0x3E];
-pub const TLS_DH_RSA_WITH_AES_128_CBC_SHA256: CipherSuite = [0x00, 0x3F];
-pub const TLS_DHE_DSS_WITH_AES_128_CBC_SHA256: CipherSuite = [0x00, 0x40];
-pub const TLS_DHE_RSA_WITH_AES_128_CBC_SHA256: CipherSuite = [0x00, 0x67];
-pub const TLS_DH_DSS_WITH_AES_256_CBC_SHA256: CipherSuite = [0x00, 0x68];
-pub const TLS_DH_RSA_WITH_AES_256_CBC_SHA256: CipherSuite = [0x00, 0x69];
-pub const TLS_DHE_DSS_WITH_AES_256_CBC_SHA256: CipherSuite = [0x00, 0x6A];
-pub const TLS_DHE_RSA_WITH_AES_256_CBC_SHA256: CipherSuite = [0x00, 0x6B];
+    // Server-authenticated Diffie-Hellman
+    TlsDhDssWith3desEdeCbcSha = 0x000D,
+    TlsDhRsaWith3desEdeCbcSha = 0x0010,
+    TlsDheDssWith3desEdeCbcSha = 0x0013,
+    TlsDheRsaWith3desEdeCbcSha = 0x0016,
+    TlsDhDssWithAes128CbcSha = 0x0030,
+    TlsDhRsaWithAes128CbcSha = 0x0031,
+    TlsDheDssWithAes128CbcSha = 0x0032,
+    TlsDheRsaWithAes128CbcSha = 0x0033,
+    TlsDhDssWithAes256CbcSha = 0x0036,
+    TlsDhRsaWithAes256CbcSha = 0x0037,
+    TlsDheDssWithAes256CbcSha = 0x0038,
+    TlsDheRsaWithAes256CbcSha = 0x0039,
+    TlsDhDssWithAes128CbcSha256 = 0x003E,
+    TlsDhRsaWithAes128CbcSha256 = 0x003F,
+    TlsDheDssWithAes128CbcSha256 = 0x0040,
+    TlsDheRsaWithAes128CbcSha256 = 0x0067,
+    TlsDhDssWithAes256CbcSha256 = 0x0068,
+    TlsDhRsaWithAes256CbcSha256 = 0x0069,
+    TlsDheDssWithAes256CbcSha256 = 0x006A,
+    TlsDheRsaWithAes256CbcSha256 = 0x006B,
 
-// Anonymous Diffie-Hellman, must not be used unless explicitly requested by application layer
-pub const TLS_DH_ANON_WITH_RC4_128_MD5: CipherSuite = [0x00, 0x18];
-pub const TLS_DH_ANON_WITH_3DES_EDE_CBC_SHA: CipherSuite = [0x00, 0x1B];
-pub const TLS_DH_ANON_WITH_AES_128_CBC_SHA: CipherSuite = [0x00, 0x34];
-pub const TLS_DH_ANON_WITH_AES_256_CBC_SHA: CipherSuite = [0x00, 0x3A];
-pub const TLS_DH_ANON_WITH_AES_128_CBC_SHA256: CipherSuite = [0x00, 0x6C];
-pub const TLS_DH_ANON_WITH_AES_256_CBC_SHA256: CipherSuite = [0x00, 0x6D];
+    // Anonymous Diffie-Hellman, must not be used unless explicitly requested by application layer
+    TlsDhAnonWithRc4128Md5 = 0x0018,
+    TlsDhAnonWith3desEdeCbcSha = 0x001B,
+    TlsDhAnonWithAes128CbcSha = 0x0034,
+    TlsDhAnonWithAes256CbcSha = 0x003A,
+    TlsDhAnonWithAes128CbcSha256 = 0x006C,
+    TlsDhAnonWithAes256CbcSha256 = 0x006D,
+
+    Unknown = 0xFFFF
+}
+
+impl ReadableFromStream for CipherSuite {
+    fn read(stream: &mut impl Iterator<Item=u8>) -> std::io::Result<Self> {
+        let u = u16::read(stream)?;
+
+        Ok(Self::try_from(u).unwrap_or(Self::Unknown))
+    }
+}
+
+/// A list of Cipher Suites, that are supported by this server. They in order of preference
+/// in descending order (most preferable first).
+const SUPPORTED_CIPHER_SUITES: [CipherSuite; 4] = [
+    CipherSuite::TlsRsaWithAes256CbcSha256,
+    CipherSuite::TlsRsaWithAes256CbcSha,
+    CipherSuite::TlsRsaWithAes128CbcSha256,
+    CipherSuite::TlsRsaWithAes128CbcSha
+];
+
+#[derive(Debug)]
+/// Error type for when the client and our server do not share any common `CipherSuite`s.
+pub struct NoAcceptableMatch;
+
+/// Our server enforces our own preference since we deal with sharing passwords. This function
+/// selects the best `CipherSuite` that are present in `SUPPORTED_CIPHER_SUITES` and in the
+/// `cipher_suites_from_client`.
+pub fn select_cipher_suite(cipher_suites_from_client: &Vec<CipherSuite>) -> Result<CipherSuite, NoAcceptableMatch> {
+    for cipher in SUPPORTED_CIPHER_SUITES.iter() {
+        if cipher_suites_from_client.contains(cipher) {
+            return Ok(*cipher);
+        }
+    }
+
+    Err(NoAcceptableMatch)
+}
