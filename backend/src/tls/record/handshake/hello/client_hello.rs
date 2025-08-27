@@ -9,10 +9,10 @@ use crate::tls::record::handshake::hello::{Extension, SessionID};
 #[derive(Debug, ReadableFromStream)]
 /// https://www.rfc-editor.org/rfc/rfc5246#section-7.4.1.2
 pub struct ClientHello {
-    client_version: ProtocolVersion,
-    random: Random,
-    session_id: SessionID,
-    cipher_suites: VariableLengthVec<CipherSuite, 2, 65534>, // 2^16-2
-    compression_methods: VariableLengthVec<CompressionMethod, 1, 255>, // 2^8-1
-    extensions: VariableLengthVec<Extension, 0, 65535>,      // 2^16 - 1
+    pub client_version: ProtocolVersion,
+    pub random: Random,
+    pub session_id: SessionID,
+    pub cipher_suites: VariableLengthVec<CipherSuite, 2, 65534>, // 2^16-2
+    pub compression_methods: VariableLengthVec<CompressionMethod, 1, 255>, // 2^8-1
+    pub extensions: VariableLengthVec<Extension, 0, 65535>,      // 2^16 - 1
 }

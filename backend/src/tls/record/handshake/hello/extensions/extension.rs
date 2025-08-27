@@ -73,3 +73,10 @@ impl Debug for Extension {
         )
     }
 }
+
+/// Returns a list of extensions that are supported and are present in `client_extensions`.
+/// 
+/// `client_extensions`: The list of extensions from the `ClientHello` message. 
+pub fn filter_extensions(client_extensions: &Vec<Extension>) -> Vec<Extension> {
+    Vec::new()
+}

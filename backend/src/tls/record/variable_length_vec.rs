@@ -52,7 +52,8 @@ where
 
         for i in 0..amount_bytes_for_len {
             // big-endian, but at the end of the buffer
-            buf[size_of::<usize>() - amount_bytes_for_len + i] = stream.next().ok_or(unexpected_eof!())?;
+            buf[size_of::<usize>() - amount_bytes_for_len + i] =
+                stream.next().ok_or(unexpected_eof!())?;
         }
 
         let length_in_bytes = usize::from_be_bytes(buf);
@@ -88,5 +89,24 @@ where
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
+    }
+}
+
+impl<T, const MIN: usize, const MAX: usize> From<Vec<T>> for VariableLengthVec<T, MIN, MAX> where
+    T: Debug + ReadableFromStream
+{
+    fn from(value: Vec<T>) -> Self {
+        Self(value)
+    }
+}
+
+impl<T, const MAX: usize> VariableLengthVec<T, 0, MAX>
+where
+    T: Debug + ReadableFromStream,
+{
+    /// Creates an empty `VariableLengthVec<T>`. This function is only available when
+    /// `MIN` is 0.
+    pub fn new_empty() -> Self {
+        VariableLengthVec(Vec::new())
     }
 }

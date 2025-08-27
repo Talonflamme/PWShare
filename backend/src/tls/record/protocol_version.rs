@@ -7,6 +7,17 @@ pub struct ProtocolVersion {
     pub minor: u8,
 }
 
+impl ProtocolVersion {
+    #[inline]
+    /// Returns a Protocol Version that is TLS1.2 (0x0303)
+    pub fn tls1_2() -> ProtocolVersion {
+        ProtocolVersion {
+            major: 0x03,
+            minor: 0x03
+        }
+    }
+}
+
 impl Display for ProtocolVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.major != 3 || self.minor > 4 {

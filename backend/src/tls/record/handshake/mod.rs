@@ -2,11 +2,11 @@ pub use handshake::*;
 pub use server_certificate::ServerCertificate;
 pub use server_key_exchange::ServerKeyExchange;
 pub use certificate_request::CertificateRequest;
-pub use client_certificate::ClientCertificate;
 pub use client_key_exchange::ClientKeyExchange;
 pub use certificate_verify::CertificateVerify;
 pub use finished::Finished;
 pub use random::Random;
+pub use hello::*;
 
 mod handshake;
 mod server_certificate;

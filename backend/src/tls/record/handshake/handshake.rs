@@ -26,7 +26,7 @@ pub enum HandshakeType {
 #[derive(Debug)]
 /// Part of a record, a `Handshake` contains the message type, a length and a body (inside the `msg_type`).
 pub struct Handshake {
-    msg_type: HandshakeType,
+    pub msg_type: HandshakeType,
     /// This length is actually 24 bits, not 32
     length: u32,
 }

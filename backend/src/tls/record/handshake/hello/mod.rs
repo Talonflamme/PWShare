@@ -1,5 +1,5 @@
 pub use client_hello::ClientHello;
-pub use extensions::extension::{Extension, ExtensionType};
+pub use extensions::{Extension, ExtensionType};
 pub use hello_request::HelloRequest;
 pub use server_hello::ServerHello;
 pub use server_hello_done::ServerHelloDone;
@@ -12,4 +12,4 @@ mod server_hello;
 mod server_hello_done;
 mod session_id;
 mod signature;
-mod extensions;
+pub mod extensions;

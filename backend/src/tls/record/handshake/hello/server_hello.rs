@@ -8,10 +8,10 @@ use crate::tls::record::variable_length_vec::VariableLengthVec;
 
 #[derive(Debug, ReadableFromStream)]
 pub struct ServerHello {
-    server_version: ProtocolVersion,
-    random: Random,
-    session_id: SessionID,
-    cipher_suite: CipherSuite,
-    compression_method: CompressionMethod,
-    extensions: VariableLengthVec<Extension, 0, 65335>
+    pub server_version: ProtocolVersion,
+    pub random: Random,
+    pub session_id: SessionID,
+    pub cipher_suite: CipherSuite,
+    pub compression_method: CompressionMethod,
+    pub extensions: VariableLengthVec<Extension, 0, 65335>
 }
