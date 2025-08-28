@@ -1,4 +1,5 @@
 use crate::tls::record::readable_from_stream::{unexpected_eof, ReadableFromStream};
+use crate::tls::{Sink, WritableToSink};
 use std::fmt::{Debug, Formatter};
 use std::io::{Error, ErrorKind};
 use std::ops::{Deref, DerefMut};
@@ -62,7 +63,7 @@ where
             return Err(Error::new(
                 ErrorKind::InvalidData,
                 format!(
-                    "Length {} is oustide of permitted range: {}..={}",
+                    "Length {} is outside of permitted range: {}..={}",
                     length_in_bytes, MIN, MAX
                 ),
             ));
@@ -83,6 +84,42 @@ where
     }
 }
 
+impl<T, const MIN: usize, const MAX: usize> WritableToSink for VariableLengthVec<T, MIN, MAX>
+where
+    T: Debug + ReadableFromStream + WritableToSink,
+{
+    fn write(&self, buffer: &mut impl Sink<u8>) -> std::io::Result<()> {
+        let amount_bytes_for_len = (MAX as f64).log(256.0).ceil() as usize;
+        let length = &self.len().to_be_bytes()[size_of::<usize>() - amount_bytes_for_len..];
+
+        buffer.extend_from_slice(length);
+
+        // we use a separate Vec<u8> here, because we need to verify that the length is in bounds
+        // before sending.
+        // Even though can't say for sure that this capacity is enough, it will be a good
+        // estimate and will only ever be too little, not too large.
+        let mut content_buf: Vec<u8> = Vec::with_capacity(self.len() * size_of::<T>());
+
+        for el in self.iter() {
+            el.write(&mut content_buf)?;
+        }
+
+        if content_buf.len() < MIN || content_buf.len() > MAX {
+            Err(Error::new(
+                ErrorKind::InvalidData,
+                format!(
+                    "Length {} is outside of permitted range: {}..={}",
+                    content_buf.len(),
+                    MIN,
+                    MAX
+                ),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
 impl<T, const MIN: usize, const MAX: usize> Debug for VariableLengthVec<T, MIN, MAX>
 where
     T: Debug + ReadableFromStream,
@@ -92,8 +129,9 @@ where
     }
 }
 
-impl<T, const MIN: usize, const MAX: usize> From<Vec<T>> for VariableLengthVec<T, MIN, MAX> where
-    T: Debug + ReadableFromStream
+impl<T, const MIN: usize, const MAX: usize> From<Vec<T>> for VariableLengthVec<T, MIN, MAX>
+where
+    T: Debug + ReadableFromStream,
 {
     fn from(value: Vec<T>) -> Self {
         Self(value)

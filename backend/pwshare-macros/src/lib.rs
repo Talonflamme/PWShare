@@ -1,12 +1,14 @@
 mod readable_from_stream;
 mod from_repr;
 mod into_repr;
+mod writable_to_sink;
 
 use crate::from_repr::impl_from_repr;
 use crate::into_repr::impl_into_repr;
 use proc_macro::TokenStream;
 use readable_from_stream::impl_readable_from_stream_trait;
 use syn::{DeriveInput, Ident};
+use crate::writable_to_sink::impl_writable_to_sink;
 
 fn get_repr_type(ast: &DeriveInput) -> Option<Ident> {
     for attr in &ast.attrs {
@@ -40,6 +42,12 @@ fn get_repr_type(ast: &DeriveInput) -> Option<Ident> {
 pub fn readable_from_stream_macro(item: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(item).unwrap();
     impl_readable_from_stream_trait(ast)
+}
+
+#[proc_macro_derive(WritableToSink)]
+pub fn writable_to_sink_macro(item: TokenStream) -> TokenStream {
+    let ast = syn::parse(item).unwrap();
+    impl_writable_to_sink(ast).into()
 }
 
 #[proc_macro_derive(FromRepr)]

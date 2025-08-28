@@ -7,6 +7,7 @@ use crate::tls::ReadableFromStream;
 use pwshare_macros::ReadableFromStream;
 use std::fmt::Debug;
 use std::io::Result;
+use crate::tls::record::writable_to_sink::{Sink, WritableToSink};
 
 #[repr(u8)]
 #[derive(Debug, ReadableFromStream)]
