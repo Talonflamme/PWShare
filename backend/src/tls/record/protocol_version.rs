@@ -1,7 +1,7 @@
-use pwshare_macros::ReadableFromStream;
+use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Display, Formatter};
 
-#[derive(ReadableFromStream)]
+#[derive(ReadableFromStream, WritableToSink)]
 pub struct ProtocolVersion {
     pub major: u8,
     pub minor: u8,

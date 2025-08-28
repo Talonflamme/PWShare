@@ -1,7 +1,7 @@
 use crypto_bigint::rand_core::{OsRng, RngCore};
-use pwshare_macros::ReadableFromStream;
+use pwshare_macros::{ReadableFromStream, WritableToSink};
 
-#[derive(Debug, PartialEq, Eq, ReadableFromStream)]
+#[derive(Debug, PartialEq, Eq, ReadableFromStream, WritableToSink)]
 pub struct Random {
     gmt_unix_time: u32,
     random_bytes: [u8; 28],

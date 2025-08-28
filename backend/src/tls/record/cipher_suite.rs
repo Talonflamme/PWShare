@@ -1,8 +1,8 @@
-use pwshare_macros::FromRepr;
-use crate::tls::ReadableFromStream;
+use pwshare_macros::{FromRepr, IntoRepr};
+use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 
 #[repr(u16)]
-#[derive(Debug, FromRepr, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, FromRepr, Clone, Copy, PartialEq, Eq, IntoRepr)]
 pub enum CipherSuite {
     // initial, must not be used as it does not protect any data
     TlsNullWithNullNull = 0x0000,
@@ -57,6 +57,22 @@ impl ReadableFromStream for CipherSuite {
         let u = u16::read(stream)?;
 
         Ok(Self::try_from(u).unwrap_or(Self::Unknown))
+    }
+}
+
+impl WritableToSink for CipherSuite {
+    fn write(&self, buffer: &mut impl Sink<u8>) -> std::io::Result<()> {
+        
+        if matches!(self, CipherSuite::Unknown) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Cannot write {:?}", self)
+            ));
+        }
+        
+        let v: u16 = self.into();
+        
+        v.write(buffer)
     }
 }
 

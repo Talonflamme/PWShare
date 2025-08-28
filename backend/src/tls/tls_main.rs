@@ -5,6 +5,7 @@ use std::io::Result;
 use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
 use crate::tls::record::extensions;
+use crate::tls::WritableToSink;
 
 // TODO: eventually, we need to separate errors from IO and errors in the bytes supplied, in which
 //  case we would send back an Error. Actually, we might even send it regardless.
@@ -37,6 +38,11 @@ fn respond_to_client_hello(client_hello: &ClientHello) {
         compression_method: CompressionMethod::Null, // no compression
         extensions: extensions.into()
     };
+    
+    let mut buffer: Vec<u8> = Vec::new();
+    s.write(&mut buffer).unwrap();
+    
+    println!("{:02x?}", buffer);
 }
 
 fn respond_to_handshake(stream: &mut TcpStream, handshake: &Handshake) {

@@ -1,10 +1,10 @@
 use crate::tls::record::handshake::hello::extensions::signature_algorithms::SignatureAlgorithmsExtension;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
-use pwshare_macros::{IntoRepr, ReadableFromStream};
+use pwshare_macros::{IntoRepr, ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Formatter};
 
 #[repr(u16)]
-#[derive(Debug, ReadableFromStream, IntoRepr)]
+#[derive(Debug, ReadableFromStream, WritableToSink, IntoRepr)]
 pub enum ExtensionType {
     ServerName(OpaqueExtensionData) = 0,
     ClientCertificateUrl(OpaqueExtensionData) = 2,
@@ -51,14 +51,14 @@ pub enum ExtensionType {
     Unknown(OpaqueExtensionData) = 65535,
 }
 
-#[derive(ReadableFromStream)]
+#[derive(ReadableFromStream, WritableToSink)]
 pub struct Extension {
     extension_type: ExtensionType,
 }
 
 /// Struct used to indicate that there is data after this, but it is not interpreted (e.g. because
 /// it's not yet implemented).
-#[derive(ReadableFromStream, Debug)]
+#[derive(ReadableFromStream, Debug, WritableToSink)]
 pub struct OpaqueExtensionData {
     extension_data: VariableLengthVec<u8, 0, 65535>,
 }
@@ -75,8 +75,8 @@ impl Debug for Extension {
 }
 
 /// Returns a list of extensions that are supported and are present in `client_extensions`.
-/// 
-/// `client_extensions`: The list of extensions from the `ClientHello` message. 
+///
+/// `client_extensions`: The list of extensions from the `ClientHello` message.
 pub fn filter_extensions(client_extensions: &Vec<Extension>) -> Vec<Extension> {
     Vec::new()
 }
