@@ -1,4 +1,4 @@
-use pwshare_macros::ReadableFromStream;
+use pwshare_macros::{ReadableFromStream, WritableToSink};
 
-#[derive(Debug, ReadableFromStream)]
+#[derive(Debug, ReadableFromStream, WritableToSink)]
 pub struct Finished;

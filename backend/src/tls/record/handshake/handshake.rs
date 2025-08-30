@@ -4,13 +4,14 @@ use super::{
     ServerKeyExchange,
 };
 use crate::tls::ReadableFromStream;
-use pwshare_macros::ReadableFromStream;
+use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::Debug;
 use std::io::Result;
+use crate::tls::record::{ContentType, RecordFragment};
 use crate::tls::record::writable_to_sink::{Sink, WritableToSink};
 
 #[repr(u8)]
-#[derive(Debug, ReadableFromStream)]
+#[derive(Debug, ReadableFromStream, WritableToSink)]
 pub enum HandshakeType {
     HelloRequest(HelloRequest) = 0,              // 0x00
     ClientHello(ClientHello) = 1,                // 0x01
@@ -53,5 +54,21 @@ impl ReadableFromStream for Handshake {
             length,
             msg_type: typ,
         })
+    }
+}
+
+impl WritableToSink for Handshake {
+    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+        todo!()
+    }
+}
+
+impl RecordFragment for Handshake {
+    const CONTENT_TYPE: ContentType = ContentType::Handshake;
+
+    fn to_data(&self) -> Result<Vec<u8>> {
+        let mut buf = Vec::new();
+        self.write(&mut buf)?;
+        Ok(buf)
     }
 }

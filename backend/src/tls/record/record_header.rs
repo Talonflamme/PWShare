@@ -16,6 +16,14 @@ pub enum ContentType {
     ApplicationData = 23,  // 0x17
 }
 
+/// A trait to be implemented when some struct is sent with a Record Header. This includes
+/// for example, the Handshake method.
+pub trait RecordFragment {
+    const CONTENT_TYPE: ContentType;
+
+    fn to_data(&self) -> io::Result<Vec<u8>>;
+}
+
 #[derive(ReadableFromStream)]
 pub struct RecordHeader {
     pub content_type: ContentType,
@@ -39,7 +47,7 @@ impl RecordHeader {
     pub fn read_from_stream(stream: &mut TcpStream) -> io::Result<RecordHeader> {
         let mut buf = [0u8; 5];
         let n = stream.read(&mut buf)?;
-        let mut iter = buf.iter().take(n).copied();
+        let mut iter = buf.into_iter().take(n);
         Self::read(&mut iter)
     }
 
