@@ -1,6 +1,6 @@
 use crate::tls::connection_state::security_parameters::CompressionMethod;
 use crate::tls::record::cipher_suite::CipherSuite;
-use crate::tls::record::extensions::Extension;
+use crate::tls::record::hello::extensions::Extension;
 use crate::tls::record::handshake::hello::SessionID;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::variable_length_vec::VariableLengthVec;

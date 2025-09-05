@@ -67,7 +67,7 @@ where
     }
 }
 
-fn find_content_between_header(content: String, header: &str, footer: &str) -> Option<String> {
+pub fn find_content_between_header(content: String, header: &str, footer: &str) -> Option<String> {
     let mut lines = content.lines();
 
     // advance iter until header is found

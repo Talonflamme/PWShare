@@ -1,4 +1,4 @@
-use crate::tls::record::extensions::renegotiation_info::RenegotiationInfoExtension;
+use crate::tls::record::hello::extensions::renegotiation_info::RenegotiationInfoExtension;
 use crate::tls::record::handshake::hello::extensions::signature_algorithms::SignatureAlgorithmsExtension;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use crate::tls::{ReadableFromStream, WritableToSink};

@@ -1,13 +1,12 @@
 use crate::tls::connection_state::security_parameters::CompressionMethod;
-use crate::tls::record::extensions::{
-    Extension, ExtensionType, RenegotiationInfoExtension,
-};
+use crate::tls::record::certificate::{ASN1Cert, Certificate};
+use crate::tls::record::hello::extensions::{self, Extension, ExtensionType, RenegotiationInfoExtension};
+use crate::tls::record::hello::{ClientHello, ServerHello, SessionID};
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::{
-    cipher_suite, ClientHello, Handshake, HandshakeType, Random, RecordFragment, RecordHeader,
-    ServerHello, SessionID,
+    cipher_suite, Handshake, HandshakeType, Random, RecordFragment, RecordHeader,
 };
-use crate::tls::record::{extensions, ContentType};
+use crate::tls::record::ContentType;
 use crate::tls::WritableToSink;
 use std::io::{Error, ErrorKind, Result, Write};
 use std::net::{TcpListener, TcpStream};
@@ -32,7 +31,7 @@ fn handle_client(mut stream: TcpStream) -> Result<()> {
     Ok(())
 }
 
-fn respond_to_client_hello(stream: &mut TcpStream, client_hello: &ClientHello) -> Result<()> {
+fn send_server_hello(stream: &mut TcpStream, client_hello: &ClientHello) -> Result<()> {
     let cipher_suite = cipher_suite::select_cipher_suite(&client_hello.cipher_suites).unwrap();
     let mut extensions = extensions::filter_extensions(&client_hello.extensions);
 
@@ -53,7 +52,25 @@ fn respond_to_client_hello(stream: &mut TcpStream, client_hello: &ClientHello) -
 
     let handshake = Handshake::new(HandshakeType::ServerHello(s));
     send_fragment(stream, &handshake, ContentType::Handshake)?;
+    Ok(())
+}
 
+fn send_certificate(stream: &mut TcpStream) -> Result<()> {
+    let asn1cert = ASN1Cert::from_file("cert.pem")?;
+
+    let certificate = Certificate {
+        certificate_list: vec![asn1cert].into(),
+    };
+
+    let handshake = Handshake::new(HandshakeType::Certificate(certificate));
+    send_fragment(stream, &handshake, ContentType::Handshake)?;
+
+    Ok(())
+}
+
+fn respond_to_client_hello(stream: &mut TcpStream, client_hello: &ClientHello) -> Result<()> {
+    send_server_hello(stream, client_hello)?;
+    send_certificate(stream)?;
     Ok(())
 }
 
@@ -107,7 +124,7 @@ fn send_fragment(
 }
 
 // Command to do a TLS handshake: openssl s_client -connect 127.0.0.1:4981 -tls1_2 -servername localhost -state -cipher AES128-SHA256 -trace -debug
-// Command to host server: openssl s_server -key key.pem -cert cert.pem -accept 8443
+// Command to host server: proj && cd PWShare/backend && openssl s_server -key key.pem -cert cert.pem -accept 8443
 pub fn start_server() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:4981")?;
 

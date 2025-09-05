@@ -1,8 +1,9 @@
 use super::hello::{ClientHello, HelloRequest, ServerHello, ServerHelloDone};
 use super::{
-    CertificateRequest, CertificateVerify, ClientKeyExchange, Finished, ServerCertificate,
+    CertificateRequest, CertificateVerify, ClientKeyExchange, Finished,
     ServerKeyExchange,
 };
+use crate::tls::record::certificate::Certificate;
 use crate::tls::record::writable_to_sink::{Sink, WritableToSink};
 use crate::tls::record::{ContentType, RecordFragment};
 use crate::tls::ReadableFromStream;
@@ -16,7 +17,7 @@ pub enum HandshakeType {
     HelloRequest(HelloRequest) = 0,              // 0x00
     ClientHello(ClientHello) = 1,                // 0x01
     ServerHello(ServerHello) = 2,                // 0x02
-    Certificate(ServerCertificate) = 11,         // 0x0b // TODO: not sure which to use here
+    Certificate(Certificate) = 11,               // 0x0b
     ServerKeyExchange(ServerKeyExchange) = 12,   // 0x0c
     CertificateRequest(CertificateRequest) = 13, // 0x0d
     ServerHelloDone(ServerHelloDone) = 14,       // 0x0e
@@ -54,9 +55,7 @@ impl ReadableFromStream for Handshake {
 
         let typ = HandshakeType::read(&mut iter)?;
 
-        Ok(Handshake {
-            msg_type: typ,
-        })
+        Ok(Handshake { msg_type: typ })
     }
 }
 
