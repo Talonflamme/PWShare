@@ -94,7 +94,7 @@ fn send_fragment(
         length: fragment_bytes.len() as u16,
     };
 
-    println!(">>> {:02x?}", fragment_bytes); // TODO: length is 004?? `Message length parse error!`
+    println!(">>> {:02x?}", fragment_bytes);
 
     let mut bytes: Vec<u8> = Vec::with_capacity(size_of::<RecordHeader>());
     header.write(&mut bytes)?;
