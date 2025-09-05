@@ -90,9 +90,6 @@ where
 {
     fn write(&self, buffer: &mut impl Sink<u8>) -> std::io::Result<()> {
         let amount_bytes_for_len = (MAX as f64).log(256.0).ceil() as usize;
-        let length = &self.len().to_be_bytes()[size_of::<usize>() - amount_bytes_for_len..];
-
-        buffer.extend_from_slice(length);
 
         // we use a separate Vec<u8> here, because we need to verify that the length is in bounds
         // before sending.
@@ -104,7 +101,9 @@ where
             el.write(&mut content_buf)?;
         }
 
-        if content_buf.len() < MIN || content_buf.len() > MAX {
+        let length = content_buf.len();
+
+        if length < MIN || length > MAX {
             Err(Error::new(
                 ErrorKind::InvalidData,
                 format!(
@@ -115,6 +114,10 @@ where
                 ),
             ))
         } else {
+            let length = &length.to_be_bytes()[size_of::<usize>() - amount_bytes_for_len..];
+
+            buffer.extend_from_slice(length);
+            buffer.extend(content_buf.into_iter());
             Ok(())
         }
     }
