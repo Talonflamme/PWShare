@@ -1,4 +1,4 @@
-use crate::tls::record::compression_method::CompressionMethod;
+use crate::tls::connection_state::security_parameters::CompressionMethod;
 use crate::tls::record::extensions::{
     Extension, ExtensionType, RenegotiationInfoExtension,
 };

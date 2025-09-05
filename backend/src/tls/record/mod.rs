@@ -7,5 +7,4 @@ pub mod protocol_version;
 pub(super) mod readable_from_stream;
 mod variable_length_vec;
 pub mod cipher_suite;
-pub mod compression_method;
 pub(super) mod writable_to_sink;
