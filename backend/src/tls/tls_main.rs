@@ -1,9 +1,15 @@
 use crate::tls::record::compression_method::CompressionMethod;
-use crate::tls::record::extensions;
+use crate::tls::record::extensions::{
+    Extension, ExtensionType, RenegotiationInfoExtension,
+};
 use crate::tls::record::protocol_version::ProtocolVersion;
-use crate::tls::record::{cipher_suite, ClientHello, Handshake, HandshakeType, Random, RecordFragment, RecordHeader, ServerHello, SessionID};
-use crate::tls::{ReadableFromStream, WritableToSink};
-use std::io::Result;
+use crate::tls::record::{
+    cipher_suite, ClientHello, Handshake, HandshakeType, Random, RecordFragment, RecordHeader,
+    ServerHello, SessionID,
+};
+use crate::tls::record::{extensions, ContentType};
+use crate::tls::WritableToSink;
+use std::io::{Error, ErrorKind, Result, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
 
@@ -28,7 +34,13 @@ fn handle_client(mut stream: TcpStream) -> Result<()> {
 
 fn respond_to_client_hello(stream: &mut TcpStream, client_hello: &ClientHello) -> Result<()> {
     let cipher_suite = cipher_suite::select_cipher_suite(&client_hello.cipher_suites).unwrap();
-    let extensions = extensions::filter_extensions(&client_hello.extensions);
+    let mut extensions = extensions::filter_extensions(&client_hello.extensions);
+
+    extensions.push(Extension {
+        extension_type: ExtensionType::new_renegotiation_info(RenegotiationInfoExtension {
+            renegotiated_connection: Vec::new().into(),
+        }),
+    });
 
     let s = ServerHello {
         server_version: ProtocolVersion::tls1_2(),
@@ -36,18 +48,11 @@ fn respond_to_client_hello(stream: &mut TcpStream, client_hello: &ClientHello) -
         cipher_suite,
         session_id: SessionID::new_empty(), // we do not store connections, so this is empty
         compression_method: CompressionMethod::Null, // no compression
-        extensions: extensions.into()
+        extensions: extensions.into(),
     };
 
-    // send_fragment(stream, &s)?;
-
-    let mut buffer: Vec<u8> = Vec::new();
-    s.write(&mut buffer).unwrap();
-
-    println!("{:02x?}", buffer);
-
-    let server_hello = ServerHello::read(&mut buffer.into_iter()).unwrap();
-    println!("{:?}", server_hello);
+    let handshake = Handshake::new(HandshakeType::ServerHello(s));
+    send_fragment(stream, &handshake, ContentType::Handshake)?;
 
     Ok(())
 }
@@ -69,11 +74,40 @@ fn respond_to_handshake(stream: &mut TcpStream, handshake: &Handshake) -> Result
     Ok(())
 }
 
-fn send_fragment(stream: &mut TcpStream, record_fragment: &impl RecordFragment) -> Result<()> {
-    todo!()
+fn send_fragment(
+    stream: &mut TcpStream,
+    record_fragment: &impl RecordFragment,
+    content_type: ContentType,
+) -> Result<()> {
+    let mut fragment_bytes = record_fragment.to_data()?;
+
+    if fragment_bytes.len() > (1 << 14) {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("Length: {} must not exceed 2^14", fragment_bytes.len()),
+        ));
+    }
+
+    let header = RecordHeader {
+        content_type,
+        version: ProtocolVersion::tls1_2(),
+        length: fragment_bytes.len() as u16,
+    };
+
+    println!(">>> {:02x?}", fragment_bytes); // TODO: length is 004?? `Message length parse error!`
+
+    let mut bytes: Vec<u8> = Vec::with_capacity(size_of::<RecordHeader>());
+    header.write(&mut bytes)?;
+
+    bytes.append(&mut fragment_bytes);
+
+    stream.write_all(bytes.as_slice())?;
+
+    Ok(())
 }
 
 // Command to do a TLS handshake: openssl s_client -connect 127.0.0.1:4981 -tls1_2 -servername localhost -state -cipher AES128-SHA256 -trace -debug
+// Command to host server: openssl s_server -key key.pem -cert cert.pem -accept 8443
 pub fn start_server() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:4981")?;
 

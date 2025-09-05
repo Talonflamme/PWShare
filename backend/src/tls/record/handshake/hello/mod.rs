@@ -1,5 +1,4 @@
 pub use client_hello::ClientHello;
-pub use extensions::{Extension, ExtensionType};
 pub use hello_request::HelloRequest;
 pub use server_hello::ServerHello;
 pub use server_hello_done::ServerHelloDone;

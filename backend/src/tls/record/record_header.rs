@@ -1,14 +1,14 @@
 use super::protocol_version::ProtocolVersion;
 use super::Handshake;
 use crate::tls::ReadableFromStream;
-use pwshare_macros::ReadableFromStream;
+use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Formatter};
 use std::io;
 use std::io::{ErrorKind, Read};
 use std::net::TcpStream;
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, Eq, ReadableFromStream)]
+#[derive(Debug, PartialEq, Eq, ReadableFromStream, WritableToSink)]
 pub enum ContentType {
     ChangeCipherSpec = 20, // 0x14
     Alert = 21,            // 0x15
@@ -24,7 +24,7 @@ pub trait RecordFragment {
     fn to_data(&self) -> io::Result<Vec<u8>>;
 }
 
-#[derive(ReadableFromStream)]
+#[derive(ReadableFromStream, WritableToSink)]
 pub struct RecordHeader {
     pub content_type: ContentType,
     pub version: ProtocolVersion,

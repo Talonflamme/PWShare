@@ -1,6 +1,6 @@
 use crate::get_repr_type;
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::{Data, DataEnum, DataStruct, DeriveInput, Fields};
 
 fn impl_writable_to_sink_struct(data_struct: &DataStruct) -> TokenStream {
@@ -100,8 +100,11 @@ pub fn impl_writable_to_sink(ast: DeriveInput) -> TokenStream {
         }
     };
 
+    let generics = ast.generics.to_token_stream();
+    let generics_where = ast.generics.where_clause;
+
     quote! {
-        impl crate::tls::WritableToSink for #name {
+        impl #generics crate::tls::WritableToSink for #name #generics #generics_where {
             fn write(&self, buffer: &mut impl crate::tls::Sink<u8>) -> std::io::Result<()> {
                 #body
             }

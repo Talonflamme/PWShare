@@ -3,12 +3,12 @@ use super::{
     CertificateRequest, CertificateVerify, ClientKeyExchange, Finished, ServerCertificate,
     ServerKeyExchange,
 };
+use crate::tls::record::writable_to_sink::{Sink, WritableToSink};
+use crate::tls::record::{ContentType, RecordFragment};
 use crate::tls::ReadableFromStream;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::Debug;
-use std::io::Result;
-use crate::tls::record::{ContentType, RecordFragment};
-use crate::tls::record::writable_to_sink::{Sink, WritableToSink};
+use std::io::{Error, ErrorKind, Result};
 
 #[repr(u8)]
 #[derive(Debug, ReadableFromStream, WritableToSink)]
@@ -29,8 +29,12 @@ pub enum HandshakeType {
 /// Part of a record, a `Handshake` contains the message type, a length and a body (inside the `msg_type`).
 pub struct Handshake {
     pub msg_type: HandshakeType,
-    /// This length is actually 24 bits, not 32
-    length: u32,
+}
+
+impl Handshake {
+    pub fn new(msg_type: HandshakeType) -> Self {
+        Handshake { msg_type }
+    }
 }
 
 impl ReadableFromStream for Handshake {
@@ -51,7 +55,6 @@ impl ReadableFromStream for Handshake {
         let typ = HandshakeType::read(&mut iter)?;
 
         Ok(Handshake {
-            length,
             msg_type: typ,
         })
     }
@@ -59,7 +62,72 @@ impl ReadableFromStream for Handshake {
 
 impl WritableToSink for Handshake {
     fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
-        todo!()
+        let mut body_buffer: Vec<u8> = Vec::new();
+
+        let typ = match &self.msg_type {
+            HandshakeType::HelloRequest(hr) => {
+                hr.write(&mut body_buffer)?;
+                0
+            }
+            HandshakeType::ClientHello(ch) => {
+                ch.write(&mut body_buffer)?;
+                1
+            }
+            HandshakeType::ServerHello(sh) => {
+                sh.write(&mut body_buffer)?;
+                2
+            }
+            HandshakeType::Certificate(c) => {
+                c.write(&mut body_buffer)?;
+                11
+            }
+            HandshakeType::ServerKeyExchange(ske) => {
+                ske.write(&mut body_buffer)?;
+                12
+            }
+            HandshakeType::CertificateRequest(cr) => {
+                cr.write(&mut body_buffer)?;
+                13
+            }
+            HandshakeType::ServerHelloDone(shd) => {
+                shd.write(&mut body_buffer)?;
+                14
+            }
+            HandshakeType::CertificateVerify(cv) => {
+                cv.write(&mut body_buffer)?;
+                15
+            }
+            HandshakeType::ClientKeyExchange(cke) => {
+                cke.write(&mut body_buffer)?;
+                16
+            }
+            HandshakeType::Finished(f) => {
+                f.write(&mut body_buffer)?;
+                20
+            }
+        };
+
+        buffer.push(typ);
+
+        if body_buffer.len() >= (1 << 24) {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                format!(
+                    "Length is too large: {}, only 24 bytes allowed.",
+                    body_buffer.len()
+                ),
+            ));
+        }
+
+        let len_bytes_be = body_buffer.len().to_be_bytes();
+
+        // save length as 24-bit integer
+        buffer.extend_from_slice(&len_bytes_be[len_bytes_be.len() - 3..]); // least significant 3 bytes
+
+        // body
+        buffer.extend(body_buffer.into_iter());
+
+        Ok(())
     }
 }
 

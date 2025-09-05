@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::{Data, DeriveInput, Fields, LitStr};
 use crate::get_repr_type;
 
@@ -95,9 +95,12 @@ pub fn impl_readable_from_stream_trait(ast: DeriveInput) -> TokenStream {
         }
     };
 
+    let generics = ast.generics.to_token_stream();
+    let generics_where = ast.generics.where_clause;
+
     quote! {
-        impl crate::tls::ReadableFromStream for #name {
-            fn read(stream: &mut impl Iterator<Item=u8>) -> std::io::Result<#name> {
+        impl #generics crate::tls::ReadableFromStream for #name #generics #generics_where {
+            fn read(stream: &mut impl Iterator<Item=u8>) -> std::io::Result<Self> {
                 #body
             }
         }

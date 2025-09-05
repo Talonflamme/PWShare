@@ -1,10 +1,11 @@
-use pwshare_macros::{ReadableFromStream, WritableToSink};
 use crate::tls::record::cipher_suite::CipherSuite;
 use crate::tls::record::compression_method::CompressionMethod;
-use crate::tls::record::handshake::hello::{Extension, SessionID};
+use crate::tls::record::extensions::Extension;
+use crate::tls::record::handshake::hello::SessionID;
 use crate::tls::record::protocol_version::ProtocolVersion;
-use crate::tls::record::{Random, RecordFragment};
 use crate::tls::record::variable_length_vec::VariableLengthVec;
+use crate::tls::record::Random;
+use pwshare_macros::{ReadableFromStream, WritableToSink};
 
 #[derive(Debug, ReadableFromStream, WritableToSink)]
 pub struct ServerHello {
