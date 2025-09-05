@@ -18,14 +18,9 @@ use std::ops::{Deref, DerefMut};
 ///
 /// Note: `MIN` and `MAX` are the length in bytes. This means, the number of elements
 /// that can be held the inner `Vec<T>` is calculated by `MAX / sizeof(T)`.
-pub struct VariableLengthVec<T, const MIN: usize, const MAX: usize>(Vec<T>)
-where
-    T: Debug + ReadableFromStream;
+pub struct VariableLengthVec<T, const MIN: usize, const MAX: usize>(Vec<T>);
 
-impl<T, const MIN: usize, const MAX: usize> Deref for VariableLengthVec<T, MIN, MAX>
-where
-    T: Debug + ReadableFromStream,
-{
+impl<T, const MIN: usize, const MAX: usize> Deref for VariableLengthVec<T, MIN, MAX> {
     type Target = Vec<T>;
 
     fn deref(&self) -> &Self::Target {
@@ -33,10 +28,7 @@ where
     }
 }
 
-impl<T, const MIN: usize, const MAX: usize> DerefMut for VariableLengthVec<T, MIN, MAX>
-where
-    T: Debug + ReadableFromStream,
-{
+impl<T, const MIN: usize, const MAX: usize> DerefMut for VariableLengthVec<T, MIN, MAX> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -44,7 +36,7 @@ where
 
 impl<T, const MIN: usize, const MAX: usize> ReadableFromStream for VariableLengthVec<T, MIN, MAX>
 where
-    T: Debug + ReadableFromStream,
+    T: ReadableFromStream,
 {
     fn read(stream: &mut impl Iterator<Item = u8>) -> std::io::Result<Self> {
         let amount_bytes_for_len = (MAX as f64).log(256.0).ceil() as usize;
@@ -86,7 +78,7 @@ where
 
 impl<T, const MIN: usize, const MAX: usize> WritableToSink for VariableLengthVec<T, MIN, MAX>
 where
-    T: Debug + ReadableFromStream + WritableToSink,
+    T: WritableToSink,
 {
     fn write(&self, buffer: &mut impl Sink<u8>) -> std::io::Result<()> {
         let amount_bytes_for_len = (MAX as f64).log(256.0).ceil() as usize;
@@ -125,26 +117,20 @@ where
 
 impl<T, const MIN: usize, const MAX: usize> Debug for VariableLengthVec<T, MIN, MAX>
 where
-    T: Debug + ReadableFromStream,
+    T: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
 }
 
-impl<T, const MIN: usize, const MAX: usize> From<Vec<T>> for VariableLengthVec<T, MIN, MAX>
-where
-    T: Debug + ReadableFromStream,
-{
+impl<T, const MIN: usize, const MAX: usize> From<Vec<T>> for VariableLengthVec<T, MIN, MAX> {
     fn from(value: Vec<T>) -> Self {
         Self(value)
     }
 }
 
-impl<T, const MAX: usize> VariableLengthVec<T, 0, MAX>
-where
-    T: Debug + ReadableFromStream,
-{
+impl<T, const MAX: usize> VariableLengthVec<T, 0, MAX> {
     /// Creates an empty `VariableLengthVec<T>`. This function is only available when
     /// `MIN` is 0.
     pub fn new_empty() -> Self {
