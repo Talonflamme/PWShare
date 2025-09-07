@@ -1,5 +1,5 @@
 use crate::cryptography::rsa::{AdditionalPrivateKeyInfo, PrivateKey, PublicKey};
-use crypto_bigint::{Encoding, InvMod, Limb, Uint, Word};
+use crypto_bigint::{Encoding, InvMod, Uint};
 
 fn encode_length(length: usize, result: &mut Vec<u8>) {
     if length <= 127 {
@@ -112,6 +112,17 @@ fn encode_sequence(mut sequence: Vec<u8>) -> Vec<u8> {
     result
 }
 
+fn encode_octet_string(mut string: Vec<u8>) -> Vec<u8> {
+    let mut result = Vec::new();
+
+    result.push(0x04); // Tag: Octet String
+
+    encode_length(string.len(), &mut result);
+    result.append(&mut string);
+
+    result
+}
+
 fn encode_object_identifier(components: &[u32]) -> Vec<u8> {
     let mut result = Vec::new();
 
@@ -219,31 +230,6 @@ fn decode_length(iter: &mut impl Iterator<Item = u8>) -> Result<usize, &'static 
     }
 }
 
-fn read_uint<const L: usize>(iter: impl Iterator<Item = u8>) -> Result<Uint<L>, &'static str> {
-    let mut res = [Limb::ZERO; L];
-    let mut buf = [0u8; Limb::BYTES];
-    let mut i = 0;
-
-    for byte in iter {
-        let j = i % Limb::BYTES;
-        buf[j] = byte;
-
-        if j == Limb::BYTES - 1 {
-            let limb_index = i / Limb::BYTES;
-            // limbs seem to be little endian, so we need to reverse the index here
-            res[L - limb_index - 1] = Limb(Word::from_be_bytes(buf));
-        }
-
-        i += 1;
-    }
-
-    if i != Uint::<L>::BYTES {
-        Err("Unexpected EOF")
-    } else {
-        Ok(Uint::new(res))
-    }
-}
-
 fn decode_integer(iter: &mut impl Iterator<Item = u8>) -> Result<i64, &'static str> {
     let tag = iter.next().ok_or("0x02 expected, none found")?;
 
@@ -312,6 +298,23 @@ fn decode_sequence(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u8>, &'sta
 
     if result.len() != length {
         Err("EOF, value bytes expected")
+    } else {
+        Ok(result)
+    }
+}
+
+fn decode_octet_string(iter: &mut impl Iterator<Item=u8>) -> Result<Vec<u8>, &'static str> {
+    let tag = iter.next().ok_or("0x04 expected, none found")?;
+
+    if tag != 0x04 {
+        return Err("0x04 expected");
+    }
+
+    let length = decode_length(iter)?;
+    let result: Vec<u8> = iter.take(length).collect();
+
+    if result.len() != length {
+        Err("EOF")
     } else {
         Ok(result)
     }
@@ -390,7 +393,7 @@ where
             add_info.q.inv_mod(&add_info.p).unwrap(),
         ));
 
-        encode_sequence(sequence)
+        encode_octet_string(encode_sequence(sequence))
     }
 }
 
@@ -479,7 +482,11 @@ where
     }
 
     fn decode_rsa_private_key(iter: &mut impl Iterator<Item = u8>) -> Result<Self, &'static str> {
-        let sequence = decode_sequence(iter)?;
+        let octet = decode_octet_string(iter)?;
+
+        let mut iter = octet.into_iter();
+
+        let sequence = decode_sequence(&mut iter)?;
 
         if iter.next().is_some() {
             return Err("Expected EOF");
