@@ -71,8 +71,7 @@ fn decode_null(iter: &mut impl Iterator<Item = u8>) -> Result<(), &'static str> 
 
 fn encode_big_integer<const L: usize>(integer: Uint<L>) -> Vec<u8>
 where
-    Uint<L>: Encoding,
-    <Uint<L> as Encoding>::Repr: AsRef<[u8]>,
+    Uint<L>: Encoding<Repr: AsRef<[u8]>>,
 {
     let mut result = Vec::new();
 
@@ -118,6 +117,18 @@ fn encode_octet_string(mut string: Vec<u8>) -> Vec<u8> {
     result.push(0x04); // Tag: Octet String
 
     encode_length(string.len(), &mut result);
+    result.append(&mut string);
+
+    result
+}
+
+fn encode_bit_string(mut string: Vec<u8>) -> Vec<u8> {
+    let mut result = Vec::new();
+
+    result.push(0x03); // Tag: Bit String
+    encode_length(string.len() + 1, &mut result);
+
+    result.push(0); // How many bits unused? Since we use bytes, 0
     result.append(&mut string);
 
     result
@@ -303,7 +314,7 @@ fn decode_sequence(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u8>, &'sta
     }
 }
 
-fn decode_octet_string(iter: &mut impl Iterator<Item=u8>) -> Result<Vec<u8>, &'static str> {
+fn decode_octet_string(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u8>, &'static str> {
     let tag = iter.next().ok_or("0x04 expected, none found")?;
 
     if tag != 0x04 {
@@ -320,43 +331,137 @@ fn decode_octet_string(iter: &mut impl Iterator<Item=u8>) -> Result<Vec<u8>, &'s
     }
 }
 
+fn decode_bit_string(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u8>, &'static str> {
+    let tag = iter.next().ok_or("0x03 expected, none found")?;
+
+    if tag != 0x03 {
+        return Err("0x03 expected");
+    }
+
+    let length = decode_length(iter)?;
+    let unused = iter.next().ok_or("EOF")?;
+
+    if unused >= 8 {
+        return Err("Too many unused bits");
+    }
+
+    let mut result: Vec<u8> = iter.take(length - 1).collect();
+
+    if result.len() + 1 != length {
+        return Err("EOF");
+    }
+
+    result[length - 2] &= 0xff << unused; // unset unused bits (right side)
+
+    Ok(result)
+}
+
 pub trait ToASN1DER {
     fn to_asn1_der(&self) -> Vec<u8>;
 }
 
+fn asn1_rsa_algorithm_identifier() -> Vec<u8> {
+    let mut algorithm = encode_object_identifier(&[1, 2, 840, 113549, 1, 1, 1]);
+    let mut null = encode_null();
+
+    algorithm.append(&mut null);
+
+    encode_sequence(algorithm)
+}
+
+fn decode_rsa_algorithm_identifier(
+    iter: &mut impl Iterator<Item = u8>,
+) -> Result<(), &'static str> {
+    let sequence = decode_sequence(iter)?;
+
+    let mut iter = sequence.into_iter();
+
+    // algorithm
+    let alg = decode_object_identifier(&mut iter)?;
+
+    if alg != vec![1, 2, 840, 113549, 1, 1, 1] {
+        return Err("Unexpected algorithm identifier");
+    }
+
+    // args should be null
+    decode_null(&mut iter)?;
+
+    if iter.next().is_some() {
+        return Err("Algorithm Identifier sequence has too many bytes");
+    }
+
+    Ok(())
+}
+
+impl<const L: usize> PublicKey<L>
+where
+    Uint<L>: Encoding<Repr: AsRef<[u8]>>,
+{
+    fn asn1_rsa_public_key(&self) -> Vec<u8> {
+        let mut sequence = Vec::new();
+
+        // modulus - n
+        sequence.append(&mut encode_big_integer(self.n));
+
+        // public exponent - e
+        sequence.append(&mut encode_big_integer(self.e));
+
+        encode_bit_string(encode_sequence(sequence))
+    }
+}
+
+impl<const L: usize> PublicKey<L> {
+    fn decode_rsa_public_key(iter: &mut impl Iterator<Item = u8>) -> Result<Self, &'static str> {
+        let bit_string = decode_bit_string(iter)?;
+
+        if iter.next().is_some() {
+            return Err("Expected EOF");
+        }
+
+        let mut iter = bit_string.into_iter();
+
+        let sequence = decode_sequence(&mut iter)?;
+
+        if iter.next().is_some() {
+            return Err("Expected EOF");
+        }
+
+        let mut iter = sequence.into_iter();
+
+        let n: Uint<L> = decode_big_integer(&mut iter)?;
+        let e: Uint<L> = decode_big_integer(&mut iter)?;
+
+        if iter.next().is_some() {
+            return Err("Expected EOF");
+        }
+
+        Ok(Self::new(n, e))
+    }
+}
+
 impl<const L: usize> ToASN1DER for PublicKey<L>
 where
-    Uint<L>: Encoding,
-    <Uint<L> as Encoding>::Repr: AsRef<[u8]>,
+    Uint<L>: Encoding<Repr: AsRef<[u8]>>,
 {
     fn to_asn1_der(&self) -> Vec<u8> {
-        let mut n = encode_big_integer(self.n);
-        let mut e = encode_big_integer(self.e);
+        let mut algorithm_identifier = asn1_rsa_algorithm_identifier();
+        let mut public_key = self.asn1_rsa_public_key();
 
-        n.append(&mut e);
+        let mut sequence = Vec::new();
+        sequence.append(&mut algorithm_identifier);
+        sequence.append(&mut public_key);
 
-        let sequence = encode_sequence(n);
-        sequence
+        encode_sequence(sequence)
     }
 }
 
 impl<const L: usize> PrivateKey<L>
 where
-    Uint<L>: Encoding,
-    <Uint<L> as Encoding>::Repr: AsRef<[u8]>,
+    Uint<L>: Encoding<Repr: AsRef<[u8]>>,
     Uint<L>: InvMod<Output = Uint<L>>,
 {
     fn asn1_version() -> Vec<u8> {
         encode_integer(0)
-    }
-
-    fn asn1_algorithm_identifier() -> Vec<u8> {
-        let mut algorithm = encode_object_identifier(&[1, 2, 840, 113549, 1, 1, 1]);
-        let mut null = encode_null();
-
-        algorithm.append(&mut null);
-
-        encode_sequence(algorithm)
     }
 
     fn asn1_rsa_private_key(&self) -> Vec<u8> {
@@ -399,13 +504,12 @@ where
 
 impl<const L: usize> ToASN1DER for PrivateKey<L>
 where
-    Uint<L>: Encoding,
-    <Uint<L> as Encoding>::Repr: AsRef<[u8]>,
+    Uint<L>: Encoding<Repr: AsRef<[u8]>>,
     Uint<L>: InvMod<Output = Uint<L>>,
 {
     fn to_asn1_der(&self) -> Vec<u8> {
         let mut version = Self::asn1_version();
-        let mut algorithm_identifier = Self::asn1_algorithm_identifier();
+        let mut algorithm_identifier = asn1_rsa_algorithm_identifier();
         let mut private_key = self.asn1_rsa_private_key();
 
         let mut sequence = Vec::new();
@@ -425,18 +529,15 @@ impl<const L: usize> FromASN1DER for PublicKey<L> {
     fn from_asn1_der(bytes: impl IntoIterator<Item = u8>) -> Result<Self, &'static str> {
         let mut iter = bytes.into_iter();
 
-        let mut sequence = decode_sequence(&mut iter)?.into_iter();
+        let sequence = decode_sequence(&mut iter)?;
 
-        let n = decode_big_integer::<L>(&mut sequence)?;
-        let e = decode_big_integer::<L>(&mut sequence)?;
-
-        if !sequence.next().is_none() {
-            Err("Sequence contains more than just 2 integers")
-        } else if !iter.next().is_none() {
-            Err("Bytes encode for more than just a sequence")
-        } else {
-            Ok(PublicKey::new(n, e))
+        if iter.next().is_some() {
+            return Err("Expected EOF");
         }
+
+        let mut iter = sequence.into_iter();
+        decode_rsa_algorithm_identifier(&mut iter)?;
+        Self::decode_rsa_public_key(&mut iter)
     }
 }
 
@@ -452,30 +553,6 @@ where
 
         if int != expected {
             return Err("Version unexpected");
-        }
-
-        Ok(())
-    }
-
-    fn decode_algorithm_identifier(
-        iter: &mut impl Iterator<Item = u8>,
-    ) -> Result<(), &'static str> {
-        let sequence = decode_sequence(iter)?;
-
-        let mut iter = sequence.into_iter();
-
-        // algorithm
-        let alg = decode_object_identifier(&mut iter)?;
-
-        if alg != vec![1, 2, 840, 113549, 1, 1, 1] {
-            return Err("Unexpected algorithm identifier");
-        }
-
-        // args should be null
-        decode_null(&mut iter)?;
-
-        if iter.next().is_some() {
-            return Err("Algorithm Identifier sequence has too many bytes");
         }
 
         Ok(())
@@ -557,7 +634,7 @@ where
         let mut iter = sequence.into_iter();
 
         Self::decode_version(&mut iter, 0)?;
-        Self::decode_algorithm_identifier(&mut iter)?;
+        decode_rsa_algorithm_identifier(&mut iter)?;
         Self::decode_rsa_private_key(&mut iter)
     }
 }
