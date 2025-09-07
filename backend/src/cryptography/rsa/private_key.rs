@@ -2,23 +2,31 @@ use std::fmt::{Debug, Display};
 
 use crypto_bigint::modular::{MontyForm, MontyParams};
 use crypto_bigint::{Odd, Uint};
-use crate::cryptography::rsa::PublicKey;
 
 #[derive(Debug)]
 pub struct PrivateKey<const L: usize> {
     pub n: Uint<L>,
     pub d: Uint<L>,
+    pub add_info: AdditionalPrivateKeyInfo<L>,
     n_montgomery: MontyParams<L>,
 }
 
+#[derive(Debug)]
+pub struct AdditionalPrivateKeyInfo<const L: usize> {
+    pub e: Uint<L>,
+    pub p: Uint<L>,
+    pub q: Uint<L>
+}
+
 impl<const L: usize> PrivateKey<L> {
-    pub fn new(n: Uint<L>, d: Uint<L>) -> Self {
+    pub fn new(n: Uint<L>, d: Uint<L>, add_info: AdditionalPrivateKeyInfo<L>) -> Self {
         let odd = Odd::new(n).unwrap();
         let params = MontyParams::new_vartime(odd);
 
         Self {
             n,
             d,
+            add_info,
             n_montgomery: params,
         }
     }

@@ -1,8 +1,9 @@
 use super::lcm::{gcd, lcm};
+use super::{rabin_miller::RabinMillerTest, PrivateKey, PublicKey, Sieve};
 use crate::cryptography::rng::rng;
-use super::{PrivateKey, rabin_miller::RabinMillerTest, PublicKey, Sieve};
-use crypto_bigint::modular::SafeGcdInverter;
-use crypto_bigint::{CheckedMul, Odd, PrecomputeInverter, Random, RandomBits, Uint};
+use crate::cryptography::rsa::private_key::AdditionalPrivateKeyInfo;
+use crypto_bigint::{CheckedMul, InvMod, Random, RandomBits, Uint};
+
 
 /// Generate a prime number with the specified amount of bits.
 /// `L` is the capacity of the Uint type.
@@ -91,21 +92,16 @@ fn choose_e<const L: usize>(lambda_n: &Uint<L>) -> Uint<L> {
     }
 }
 
-macro_rules! sat_limbs_to_unsat_limbs {
-    ($limbs:expr) => {
-        ($limbs * crypto_bigint::Limb::BITS as usize + 64).div_ceil(62)
-    };
-}
-
 macro_rules! generate_key {
-    ($limbs:expr) => {
-        // we calculate the number of Unsat Limbs by
-        // UL = (L * 64 + 64) / 62
-        $crate::rsa::key_generation::generate_keys::<
-            $limbs,
-            { (($limbs + 1) * crypto_bigint::Limb::BITS as usize).div_ceil(62) },
-        >()
-    };
+    ($bits: expr) => {{
+        const _ASSERT_DIV64: () = {
+            if $bits % 64 != 0 {
+                panic!("bits must be divisible by 64");
+            }
+        };
+
+        $crate::rsa::key_generation::generate_keys::<{$bits / 64}>()
+    }};
 }
 
 pub(crate) use generate_key;
@@ -113,9 +109,9 @@ pub(crate) use generate_key;
 /// Generate the public and private keys. Pr is the amount of Limbs for the private keys. Pu is the amount of Limbs for the public key.
 /// `Pub = Pr * 2`. One Limb = 64 bits. The private keys (p and q), hence, will have a size of Pr * 64 bits.
 /// The public key (product of p and q) uses double that amount, so Pr * 128 bits = Pu * 64 bits.
-pub fn generate_keys<const L: usize, const UNSAT_LIMBS: usize>() -> (PublicKey<L>, PrivateKey<L>)
+pub fn generate_keys<const L: usize>() -> (PublicKey<L>, PrivateKey<L>)
 where
-    Odd<Uint<L>>: PrecomputeInverter<Inverter = SafeGcdInverter<L, UNSAT_LIMBS>>,
+    Uint<L>: InvMod<Output = Uint<L>>,
 {
     //?  (1) Choose two large prime numbers p and q
     let (p, q) = generate_p_and_q::<L>();
@@ -133,7 +129,7 @@ where
     let d = e.inv_mod(&lambda_n).unwrap();
 
     let pub_key = PublicKey::new(n, e);
-    let prv_key = PrivateKey::new(n, d);
+    let prv_key = PrivateKey::new(n, d, AdditionalPrivateKeyInfo { e, p, q });
 
     (pub_key, prv_key)
 }

@@ -1,7 +1,7 @@
 use crate::cryptography::pem::asn1der::{FromASN1DER, ToASN1DER};
 use crate::cryptography::pem::base64::{base64decode, base64encode};
 use crate::cryptography::rsa::{PrivateKey, PublicKey};
-use crypto_bigint::{Encoding, Uint};
+use crypto_bigint::{Encoding, InvMod, Uint};
 
 pub trait ToPemContent {
     fn to_pem_content(&self) -> String;
@@ -49,6 +49,7 @@ impl<const L: usize> ToPemContent for PrivateKey<L>
 where
     Uint<L>: Encoding,
     <Uint<L> as Encoding>::Repr: AsRef<[u8]>,
+    Uint<L>: InvMod<Output = Uint<L>>,
 {
     fn to_pem_content(&self) -> String {
         let asn1der_repr = self.to_asn1_der();
@@ -57,9 +58,9 @@ where
         let content = insert_newlines(b64, 64);
 
         let result = format!(
-            "-----BEGIN RSA PRIVATE KEY-----
+            "-----BEGIN PRIVATE KEY-----
 {}
------END RSA PRIVATE KEY-----",
+-----END PRIVATE KEY-----",
             content
         );
 
@@ -107,12 +108,15 @@ impl<const L: usize> FromPemContent for PublicKey<L> {
     }
 }
 
-impl<const L: usize> FromPemContent for PrivateKey<L> {
+impl<const L: usize> FromPemContent for PrivateKey<L>
+where
+    Uint<L>: InvMod<Output = Uint<L>>,
+{
     fn from_pem_content(content: String) -> Result<Self, &'static str> {
         let content = find_content_between_header(
             content,
-            "-----BEGIN RSA PRIVATE KEY-----",
-            "-----END RSA PRIVATE KEY-----",
+            "-----BEGIN PRIVATE KEY-----",
+            "-----END PRIVATE KEY-----",
         )
         .ok_or("Could not find header/footer for `RSA PRIVATE KEY`")?;
 

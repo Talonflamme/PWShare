@@ -1,5 +1,6 @@
 pub use public_key::PublicKey;
-pub use private_key::PrivateKey;
+pub use private_key::{PrivateKey, AdditionalPrivateKeyInfo};
+pub use key_generation::{generate_keys};
 pub(self) use sieve::Sieve;
 
 pub mod key_generation;
