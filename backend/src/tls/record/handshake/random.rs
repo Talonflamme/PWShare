@@ -22,4 +22,13 @@ impl Random {
             random_bytes
         }
     }
+
+    pub fn to_bytes(&self) -> [u8; 32] {
+        let mut res = [0; 32];
+
+        res[..4].copy_from_slice(&self.gmt_unix_time.to_be_bytes());
+        res[4..].copy_from_slice(&self.random_bytes);
+
+        res
+    }
 }

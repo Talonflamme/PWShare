@@ -1,4 +1,4 @@
-use crate::tls::connection_state::security_parameters::CompressionMethod;
+use crate::tls::connection_state::security_parameters::{CompressionMethod, ConnectionEnd, SecurityParameters};
 use crate::tls::record::certificate::{ASN1Cert, Certificate};
 use crate::tls::record::hello::extensions::{self, Extension, ExtensionType, RenegotiationInfoExtension};
 use crate::tls::record::hello::{ClientHello, ServerHello, SessionID};
@@ -31,9 +31,11 @@ fn handle_client(mut stream: TcpStream) -> Result<()> {
     Ok(())
 }
 
-fn send_server_hello(stream: &mut TcpStream, client_hello: &ClientHello) -> Result<()> {
+fn send_server_hello(stream: &mut TcpStream, client_hello: &ClientHello, params: &mut SecurityParameters) -> Result<()> {
     let cipher_suite = cipher_suite::select_cipher_suite(&client_hello.cipher_suites).unwrap();
     let mut extensions = extensions::filter_extensions(&client_hello.extensions);
+
+    cipher_suite.set_security_params(params);
 
     extensions.push(Extension {
         extension_type: ExtensionType::new_renegotiation_info(RenegotiationInfoExtension {
@@ -41,7 +43,7 @@ fn send_server_hello(stream: &mut TcpStream, client_hello: &ClientHello) -> Resu
         }),
     });
 
-    let s = ServerHello {
+    let server_hello = ServerHello {
         server_version: ProtocolVersion::tls1_2(),
         random: Random::generate(),
         cipher_suite,
@@ -50,7 +52,11 @@ fn send_server_hello(stream: &mut TcpStream, client_hello: &ClientHello) -> Resu
         extensions: extensions.into(),
     };
 
-    let handshake = Handshake::new(HandshakeType::ServerHello(s));
+    params.compression_algorithm = Some(server_hello.compression_method.clone());
+    params.client_random = Some(client_hello.random.to_bytes());
+    params.server_random = Some(server_hello.random.to_bytes());
+
+    let handshake = Handshake::new(HandshakeType::ServerHello(server_hello));
     send_fragment(stream, &handshake, ContentType::Handshake)?;
     Ok(())
 }
@@ -69,8 +75,11 @@ fn send_certificate(stream: &mut TcpStream) -> Result<()> {
 }
 
 fn respond_to_client_hello(stream: &mut TcpStream, client_hello: &ClientHello) -> Result<()> {
-    send_server_hello(stream, client_hello)?;
+    let mut params = SecurityParameters::new_empty(ConnectionEnd::Server);
+
+    send_server_hello(stream, client_hello, &mut params)?;
     send_certificate(stream)?;
+
     Ok(())
 }
 

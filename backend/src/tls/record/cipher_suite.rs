@@ -1,5 +1,8 @@
-use pwshare_macros::{FromRepr, IntoRepr};
+use crate::tls::connection_state::security_parameters::{
+    BulkCipherAlgorithm, CipherType, MACAlgorithm, PRFAlgorithm, SecurityParameters,
+};
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
+use pwshare_macros::{FromRepr, IntoRepr};
 
 #[repr(u16)]
 #[derive(Debug, FromRepr, Clone, Copy, PartialEq, Eq, IntoRepr)]
@@ -49,11 +52,11 @@ pub enum CipherSuite {
     TlsDhAnonWithAes128CbcSha256 = 0x006C,
     TlsDhAnonWithAes256CbcSha256 = 0x006D,
 
-    Unknown = 0xFFFF
+    Unknown = 0xFFFF,
 }
 
 impl ReadableFromStream for CipherSuite {
-    fn read(stream: &mut impl Iterator<Item=u8>) -> std::io::Result<Self> {
+    fn read(stream: &mut impl Iterator<Item = u8>) -> std::io::Result<Self> {
         let u = u16::read(stream)?;
 
         Ok(Self::try_from(u).unwrap_or(Self::Unknown))
@@ -62,17 +65,302 @@ impl ReadableFromStream for CipherSuite {
 
 impl WritableToSink for CipherSuite {
     fn write(&self, buffer: &mut impl Sink<u8>) -> std::io::Result<()> {
-        
         if matches!(self, CipherSuite::Unknown) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Cannot write {:?}", self)
+                format!("Cannot write {:?}", self),
             ));
         }
-        
+
         let v: u16 = self.into();
-        
+
         v.write(buffer)
+    }
+}
+
+macro_rules! define_mac {
+    ($params: ident,
+    mac = Null) => {
+        $params.mac_algorithm = Some(MACAlgorithm::Null);
+        $params.mac_length = Some(0);
+        $params.mac_key_length = Some(0);
+    };
+
+    ($params: ident,
+    mac = HMacMd5) => {
+        $params.mac_algorithm = Some(MACAlgorithm::HMacMd5);
+        $params.mac_length = Some(16);
+        $params.mac_key_length = Some(16);
+    };
+
+    ($params: ident,
+    mac = HMacSha1) => {
+        $params.mac_algorithm = Some(MACAlgorithm::HMacSha1);
+        $params.mac_length = Some(20);
+        $params.mac_key_length = Some(20);
+    };
+
+    ($params: ident,
+    mac = HMacSha256) => {
+        $params.mac_algorithm = Some(MACAlgorithm::HMacSha256);
+        $params.mac_length = Some(32);
+        $params.mac_key_length = Some(32);
+    };
+
+    ($params: ident,
+    mac = HMacSha384) => {
+        $params.mac_algorithm = Some(MACAlgorithm::HMacSha384);
+        $params.mac_length = Some(48);
+        $params.mac_key_length = Some(48);
+    };
+
+    ($params: ident,
+    mac = HMacSha512) => {
+        $params.mac_algorithm = Some(MACAlgorithm::HMacSha512);
+        $params.mac_length = Some(64);
+        $params.mac_key_length = Some(64);
+    };
+}
+
+macro_rules! define_suite {
+    (
+        $params: ident,
+        prf = $prf:path,
+        cipher = Null,
+        mac = $mac: ident
+    ) => {
+        $params.prf_algorithm = Some($prf);
+        $params.bulk_cipher_algorithm = Some(BulkCipherAlgorithm::Null);
+        $params.cipher_type = Some(CipherType::Stream);
+        $params.enc_key_length = Some(0);
+        $params.block_length = Some(0);
+        $params.fixed_iv_length = Some(0);
+        $params.record_iv_length = Some(0);
+        define_mac!($params, mac = $mac);
+    };
+
+    (
+        $params: ident,
+        prf = $prf:path,
+        cipher = Rc4 | keylen = $key_len:expr,
+        mac = $mac: ident
+    ) => {
+        $params.prf_algorithm = Some($prf);
+        $params.bulk_cipher_algorithm = Some(BulkCipherAlgorithm::Rc4);
+        $params.cipher_type = Some(CipherType::Stream);
+        $params.enc_key_length = Some($key_len);
+        $params.block_length = Some(0);
+        $params.fixed_iv_length = Some(0);
+        $params.record_iv_length = Some(0);
+        define_mac!($params, mac = $mac);
+    };
+
+    (
+        $params: ident,
+        prf = $prf:path,
+        cipher = AesCbc | keylen = $key_len:expr,
+        mac = $mac: ident
+    ) => {
+        $params.prf_algorithm = Some($prf);
+        $params.bulk_cipher_algorithm = Some(BulkCipherAlgorithm::Aes);
+        $params.cipher_type = Some(CipherType::Block);
+        $params.enc_key_length = Some($key_len);
+        $params.block_length = Some(16);
+        $params.fixed_iv_length = Some(16);
+        $params.record_iv_length = Some(16);
+        define_mac!($params, mac = $mac);
+    };
+
+    (
+        $params: ident,
+        prf = $prf:path,
+        cipher = TDes,
+        mac = $mac: ident
+    ) => {
+        $params.prf_algorithm = Some($prf);
+        $params.bulk_cipher_algorithm = Some(BulkCipherAlgorithm::TDes);
+        $params.cipher_type = Some(CipherType::Block);
+        $params.enc_key_length = Some(24);
+        $params.block_length = Some(8);
+        $params.fixed_iv_length = Some(8);
+        $params.record_iv_length = Some(8);
+        define_mac!($params, mac = $mac);
+    };
+}
+
+impl CipherSuite {
+    pub fn set_security_params(&self, params: &mut SecurityParameters) {
+        match self {
+            CipherSuite::TlsNullWithNullNull => panic!("tls_null_with_null must not be used"),
+            CipherSuite::Unknown => panic!("Cannot set security params on Unknown"),
+
+            CipherSuite::TlsRsaWithNullMd5 => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = Null,
+                    mac = HMacMd5
+                );
+            }
+
+            CipherSuite::TlsRsaWithNullSha => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = Null,
+                    mac = HMacSha1
+                );
+            }
+
+            CipherSuite::TlsRsaWithNullSha256 => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = Null,
+                    mac = HMacSha256
+                );
+            }
+
+            CipherSuite::TlsRsaWithRc4128Md5 => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = Rc4 | keylen = 16,
+                    mac = HMacMd5
+                );
+            }
+
+            CipherSuite::TlsRsaWithRc4128Sha => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = Rc4 | keylen = 16,
+                    mac = HMacSha1
+                );
+            }
+
+            CipherSuite::TlsRsaWith3desEdeCbcSha => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = TDes,
+                    mac = HMacSha1
+                );
+            }
+
+            CipherSuite::TlsRsaWithAes128CbcSha => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = AesCbc | keylen = 16,
+                    mac = HMacSha1
+                );
+            }
+
+            CipherSuite::TlsRsaWithAes256CbcSha => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = AesCbc | keylen = 32,
+                    mac = HMacSha1
+                );
+            }
+
+            CipherSuite::TlsRsaWithAes128CbcSha256 => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = AesCbc | keylen = 16,
+                    mac = HMacSha256
+                );
+            }
+
+            CipherSuite::TlsRsaWithAes256CbcSha256 => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = AesCbc | keylen = 32,
+                    mac = HMacSha256
+                );
+            }
+
+            // All the DHE/DH/Anon variants just change the key exchange,
+            // not the symmetric algorithms. They map to the same values
+            // as the corresponding RSA suites:
+            CipherSuite::TlsDhDssWith3desEdeCbcSha
+            | CipherSuite::TlsDhRsaWith3desEdeCbcSha
+            | CipherSuite::TlsDheDssWith3desEdeCbcSha
+            | CipherSuite::TlsDheRsaWith3desEdeCbcSha
+            | CipherSuite::TlsDhAnonWith3desEdeCbcSha => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = TDes,
+                    mac = HMacSha1
+                );
+            }
+
+            CipherSuite::TlsDhDssWithAes128CbcSha
+            | CipherSuite::TlsDhRsaWithAes128CbcSha
+            | CipherSuite::TlsDheDssWithAes128CbcSha
+            | CipherSuite::TlsDheRsaWithAes128CbcSha
+            | CipherSuite::TlsDhAnonWithAes128CbcSha => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = AesCbc | keylen = 16,
+                    mac = HMacSha1
+                );
+            }
+
+            CipherSuite::TlsDhDssWithAes256CbcSha
+            | CipherSuite::TlsDhRsaWithAes256CbcSha
+            | CipherSuite::TlsDheDssWithAes256CbcSha
+            | CipherSuite::TlsDheRsaWithAes256CbcSha
+            | CipherSuite::TlsDhAnonWithAes256CbcSha => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = AesCbc | keylen = 32,
+                    mac = HMacSha1
+                );
+            }
+
+            CipherSuite::TlsDhDssWithAes128CbcSha256
+            | CipherSuite::TlsDhRsaWithAes128CbcSha256
+            | CipherSuite::TlsDheDssWithAes128CbcSha256
+            | CipherSuite::TlsDheRsaWithAes128CbcSha256
+            | CipherSuite::TlsDhAnonWithAes128CbcSha256 => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = AesCbc | keylen = 16,
+                    mac = HMacSha256
+                );
+            }
+
+            CipherSuite::TlsDhDssWithAes256CbcSha256
+            | CipherSuite::TlsDhRsaWithAes256CbcSha256
+            | CipherSuite::TlsDheDssWithAes256CbcSha256
+            | CipherSuite::TlsDheRsaWithAes256CbcSha256
+            | CipherSuite::TlsDhAnonWithAes256CbcSha256 => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = AesCbc | keylen = 32,
+                    mac = HMacSha256
+                );
+            }
+
+            CipherSuite::TlsDhAnonWithRc4128Md5 => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = Rc4 | keylen = 16,
+                    mac = HMacMd5
+                );
+            }
+        }
     }
 }
 
@@ -82,7 +370,7 @@ const SUPPORTED_CIPHER_SUITES: [CipherSuite; 4] = [
     CipherSuite::TlsRsaWithAes256CbcSha256,
     CipherSuite::TlsRsaWithAes256CbcSha,
     CipherSuite::TlsRsaWithAes128CbcSha256,
-    CipherSuite::TlsRsaWithAes128CbcSha
+    CipherSuite::TlsRsaWithAes128CbcSha,
 ];
 
 #[derive(Debug)]
@@ -92,7 +380,9 @@ pub struct NoAcceptableMatch;
 /// Our server enforces our own preference since we deal with sharing passwords. This function
 /// selects the best `CipherSuite` that are present in `SUPPORTED_CIPHER_SUITES` and in the
 /// `cipher_suites_from_client`.
-pub fn select_cipher_suite(cipher_suites_from_client: &Vec<CipherSuite>) -> Result<CipherSuite, NoAcceptableMatch> {
+pub fn select_cipher_suite(
+    cipher_suites_from_client: &Vec<CipherSuite>,
+) -> Result<CipherSuite, NoAcceptableMatch> {
     for cipher in SUPPORTED_CIPHER_SUITES.iter() {
         if cipher_suites_from_client.contains(cipher) {
             return Ok(*cipher);
