@@ -100,7 +100,7 @@ macro_rules! generate_key {
             }
         };
 
-        $crate::rsa::key_generation::generate_keys::<{$bits / 64}>()
+        $crate::cryptography::rsa::key_generation::generate_keys::<{$bits / 64}>()
     }};
 }
 
