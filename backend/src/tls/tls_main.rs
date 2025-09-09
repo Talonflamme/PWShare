@@ -1,7 +1,7 @@
 use crate::tls::connection_state::security_parameters::{CompressionMethod, ConnectionEnd, SecurityParameters};
 use crate::tls::record::certificate::{ASN1Cert, Certificate};
 use crate::tls::record::hello::extensions::{self, Extension, ExtensionType, RenegotiationInfoExtension};
-use crate::tls::record::hello::{ClientHello, ServerHello, SessionID};
+use crate::tls::record::hello::{ClientHello, ServerHello, ServerHelloDone, SessionID};
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::{
     cipher_suite, Handshake, HandshakeType, Random, RecordFragment, RecordHeader,
@@ -11,6 +11,7 @@ use crate::tls::WritableToSink;
 use std::io::{Error, ErrorKind, Result, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
+use crate::util::UintDisplay;
 
 // TODO: eventually, we need to separate errors from IO and errors in the bytes supplied, in which
 //  case we would send back an Error. Actually, we might even send it regardless.
@@ -22,9 +23,6 @@ fn handle_client(mut stream: TcpStream) -> Result<()> {
 
     let header = RecordHeader::read_from_stream(&mut stream)?;
     let handshake = header.read_handshake_from_stream(&mut stream)?;
-
-    println!("{:?}", header);
-    println!("{:#?}", handshake);
 
     respond_to_handshake(&mut stream, &handshake)?;
 
@@ -74,11 +72,21 @@ fn send_certificate(stream: &mut TcpStream) -> Result<()> {
     Ok(())
 }
 
+fn send_server_hello_done(stream: &mut TcpStream) -> Result<()> {
+    let server_hello_done = ServerHelloDone { };
+
+    let handshake = Handshake::new(HandshakeType::ServerHelloDone(server_hello_done));
+    send_fragment(stream, &handshake, ContentType::Handshake)?;
+
+    Ok(())
+}
+
 fn respond_to_client_hello(stream: &mut TcpStream, client_hello: &ClientHello) -> Result<()> {
     let mut params = SecurityParameters::new_empty(ConnectionEnd::Server);
 
     send_server_hello(stream, client_hello, &mut params)?;
     send_certificate(stream)?;
+    send_server_hello_done(stream)?;
 
     Ok(())
 }
@@ -120,7 +128,7 @@ fn send_fragment(
         length: fragment_bytes.len() as u16,
     };
 
-    println!(">>> {:02x?}", fragment_bytes);
+    println!(">>> [{}]", fragment_bytes.hex_with_sep(" "));
 
     let mut bytes: Vec<u8> = Vec::with_capacity(size_of::<RecordHeader>());
     header.write(&mut bytes)?;

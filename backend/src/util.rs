@@ -27,6 +27,8 @@ pub trait UintDisplay {
         self.radix(16).unwrap()
     }
 
+    fn hex_with_sep(&self, sep: &str) -> String;
+
     fn bin(&self) -> String {
         self.radix(2).unwrap()
     }
@@ -35,6 +37,10 @@ pub trait UintDisplay {
 }
 
 impl<const L: usize> UintDisplay for Uint<L> {
+    fn hex_with_sep(&self, _: &str) -> String {
+        self.hex()
+    }
+
     fn radix(&self, radix: u32) -> Result<String, UintToRadixError> {
         let mut clone = self.clone();
 
@@ -56,6 +62,13 @@ impl<const L: usize> UintDisplay for Uint<L> {
 }
 
 impl<const L: usize> UintDisplay for Vec<Uint<L>> {
+    fn hex_with_sep(&self, sep: &str) -> String {
+        self.iter()
+            .map(|uint| uint.hex())
+            .collect::<Vec<_>>()
+            .join(sep)
+    }
+
     fn radix(&self, radix: u32) -> Result<String, UintToRadixError> {
         let mut strings = Vec::new();
 
@@ -70,6 +83,13 @@ impl<const L: usize> UintDisplay for Vec<Uint<L>> {
 impl UintDisplay for &[u8] {
     fn hex(&self) -> String {
         self.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    fn hex_with_sep(&self, sep: &str) -> String {
+        self.iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(sep)
     }
 
     fn bin(&self) -> String {
@@ -104,17 +124,7 @@ impl UintDisplay for &[u8] {
 }
 
 impl UintDisplay for Vec<u8> {
-    fn dec(&self) -> String {
-        self.as_slice().dec()
-    }
-
-    fn hex(&self) -> String {
-        self.as_slice().hex()
-    }
-
-    fn bin(&self) -> String {
-        self.as_slice().bin()
-    }
+    fn hex_with_sep(&self, sep: &str) -> String { self.as_slice().hex_with_sep(sep) }
 
     fn radix(&self, radix: u32) -> Result<String, UintToRadixError> {
         self.as_slice().radix(radix)
