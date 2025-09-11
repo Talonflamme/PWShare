@@ -34,6 +34,12 @@ impl<T, const MIN: usize, const MAX: usize> DerefMut for VariableLengthVec<T, MI
     }
 }
 
+impl<T, const MIN: usize, const MAX: usize> Into<Vec<T>> for VariableLengthVec<T, MIN, MAX> {
+    fn into(self) -> Vec<T> {
+        self.0
+    }
+}
+
 impl<T, const MIN: usize, const MAX: usize> ReadableFromStream for VariableLengthVec<T, MIN, MAX>
 where
     T: ReadableFromStream,

@@ -24,7 +24,32 @@ fn handle_client(mut stream: TcpStream) -> Result<()> {
     let header = RecordHeader::read_from_stream(&mut stream)?;
     let handshake = header.read_handshake_from_stream(&mut stream)?;
 
-    respond_to_handshake(&mut stream, &handshake)?;
+    // should be ClientHello
+    let HandshakeType::ClientHello(client_hello) = handshake.msg_type else {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            format!("Expected ClientHello, got: {:?}", handshake.msg_type)
+        ));
+    };
+
+    // TODO: check version and abort if less than TLS 1.2
+
+    // respond
+    respond_to_client_hello(&mut stream, &client_hello)?;
+
+    let header = RecordHeader::read_from_stream(&mut stream)?;
+    let handshake = header.read_handshake_from_stream(&mut stream)?;
+
+    // no Certificate, since we did not request one
+    // now we expect ClientKeyExchange
+    let HandshakeType::ClientKeyExchange(client_key_exchange) = handshake.msg_type else {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            format!("Expected ClientKeyExchange, got: {:?}", handshake.msg_type)
+        ));
+    };
+
+    println!("{:?}", client_key_exchange);
 
     Ok(())
 }
@@ -87,23 +112,6 @@ fn respond_to_client_hello(stream: &mut TcpStream, client_hello: &ClientHello) -
     send_server_hello(stream, client_hello, &mut params)?;
     send_certificate(stream)?;
     send_server_hello_done(stream)?;
-
-    Ok(())
-}
-
-fn respond_to_handshake(stream: &mut TcpStream, handshake: &Handshake) -> Result<()> {
-    match &handshake.msg_type {
-        HandshakeType::HelloRequest(_) => {}
-        HandshakeType::ClientHello(ch) => respond_to_client_hello(stream, ch)?,
-        HandshakeType::ServerHello(_) => {}
-        HandshakeType::Certificate(_) => {}
-        HandshakeType::ServerKeyExchange(_) => {}
-        HandshakeType::CertificateRequest(_) => {}
-        HandshakeType::ServerHelloDone(_) => {}
-        HandshakeType::CertificateVerify(_) => {}
-        HandshakeType::ClientKeyExchange(_) => {}
-        HandshakeType::Finished(_) => {}
-    }
 
     Ok(())
 }
