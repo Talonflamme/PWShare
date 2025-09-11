@@ -1,17 +1,27 @@
-use crate::tls::connection_state::security_parameters::{CompressionMethod, ConnectionEnd, SecurityParameters};
-use crate::tls::record::certificate::{ASN1Cert, Certificate};
-use crate::tls::record::hello::extensions::{self, Extension, ExtensionType, RenegotiationInfoExtension};
-use crate::tls::record::hello::{ClientHello, ServerHello, ServerHelloDone, SessionID};
-use crate::tls::record::protocol_version::ProtocolVersion;
-use crate::tls::record::{
-    cipher_suite, Handshake, HandshakeType, Random, RecordFragment, RecordHeader,
+use crate::cryptography::pem::FromPemContent;
+use crate::cryptography::pkcs1_v1_5;
+use crate::cryptography::rsa::PrivateKey;
+use crate::tls::connection_state::security_parameters::{
+    CompressionMethod, ConnectionEnd, SecurityParameters,
 };
+use crate::tls::record::certificate::{ASN1Cert, Certificate};
+use crate::tls::record::hello::extensions::{
+    self, Extension, ExtensionType, RenegotiationInfoExtension,
+};
+use crate::tls::record::hello::{ClientHello, ServerHello, ServerHelloDone, SessionID};
+use crate::tls::record::key_exchange::rsa::PreMasterSecret;
+use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::ContentType;
+use crate::tls::record::{
+    cipher_suite, ClientKeyExchange, Handshake, HandshakeType, Random, RecordFragment, RecordHeader,
+};
 use crate::tls::WritableToSink;
+use crate::util::UintDisplay;
+use crypto_bigint::{BitOps, Uint};
+use std::fs;
 use std::io::{Error, ErrorKind, Result, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
-use crate::util::UintDisplay;
 
 // TODO: eventually, we need to separate errors from IO and errors in the bytes supplied, in which
 //  case we would send back an Error. Actually, we might even send it regardless.
@@ -28,7 +38,7 @@ fn handle_client(mut stream: TcpStream) -> Result<()> {
     let HandshakeType::ClientHello(client_hello) = handshake.msg_type else {
         return Err(Error::new(
             ErrorKind::InvalidInput,
-            format!("Expected ClientHello, got: {:?}", handshake.msg_type)
+            format!("Expected ClientHello, got: {:?}", handshake.msg_type),
         ));
     };
 
@@ -45,16 +55,41 @@ fn handle_client(mut stream: TcpStream) -> Result<()> {
     let HandshakeType::ClientKeyExchange(client_key_exchange) = handshake.msg_type else {
         return Err(Error::new(
             ErrorKind::InvalidInput,
-            format!("Expected ClientKeyExchange, got: {:?}", handshake.msg_type)
+            format!("Expected ClientKeyExchange, got: {:?}", handshake.msg_type),
         ));
     };
 
     println!("{:?}", client_key_exchange);
 
+    let pre_master = decode_pre_master_secret(client_key_exchange)?;
+
+    println!("{:?}", pre_master);
+
     Ok(())
 }
 
-fn send_server_hello(stream: &mut TcpStream, client_hello: &ClientHello, params: &mut SecurityParameters) -> Result<()> {
+fn decode_pre_master_secret(client_key_exchange: ClientKeyExchange) -> Result<PreMasterSecret> {
+    let key_content = fs::read_to_string("private_key.pem")?;
+    let key = PrivateKey::<64>::from_pem_content(key_content)
+        .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
+
+    client_key_exchange
+        .exchange_keys
+        .pre_master_secret
+        .decrypt(move |bytes| {
+            let uint = Uint::<64>::from_be_slice(bytes.as_slice());
+            let padded = key.decode(uint).to_be_bytes();
+
+            let message = pkcs1_v1_5::unpad(&padded, 64 * 8).unwrap();
+            message
+        })
+}
+
+fn send_server_hello(
+    stream: &mut TcpStream,
+    client_hello: &ClientHello,
+    params: &mut SecurityParameters,
+) -> Result<()> {
     let cipher_suite = cipher_suite::select_cipher_suite(&client_hello.cipher_suites).unwrap();
     let mut extensions = extensions::filter_extensions(&client_hello.extensions);
 
@@ -98,7 +133,7 @@ fn send_certificate(stream: &mut TcpStream) -> Result<()> {
 }
 
 fn send_server_hello_done(stream: &mut TcpStream) -> Result<()> {
-    let server_hello_done = ServerHelloDone { };
+    let server_hello_done = ServerHelloDone {};
 
     let handshake = Handshake::new(HandshakeType::ServerHelloDone(server_hello_done));
     send_fragment(stream, &handshake, ContentType::Handshake)?;

@@ -14,4 +14,4 @@ mod finished;
 mod random;
 pub mod hello;
 pub mod certificate;
-mod key_exchange;
+pub mod key_exchange;
