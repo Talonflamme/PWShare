@@ -1,16 +1,25 @@
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use std::any::type_name;
+use std::fmt::{Debug, Formatter};
 use std::io::{Error, ErrorKind, Result};
 use std::marker::PhantomData;
 
-#[derive(Debug)]
 pub struct PublicKeyEncrypted<T>
 where
     T: ReadableFromStream,
 {
     bytes: VariableLengthVec<u8, 0, 65535>,
     _marker: PhantomData<T>,
+}
+
+impl<T> Debug for PublicKeyEncrypted<T>
+where
+    T: ReadableFromStream,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.bytes.fmt(f)
+    }
 }
 
 impl<T> WritableToSink for PublicKeyEncrypted<T>
@@ -23,8 +32,10 @@ where
 }
 
 impl<T> ReadableFromStream for PublicKeyEncrypted<T>
-where T: ReadableFromStream {
-    fn read(stream: &mut impl Iterator<Item=u8>) -> Result<Self> {
+where
+    T: ReadableFromStream,
+{
+    fn read(stream: &mut impl Iterator<Item = u8>) -> Result<Self> {
         Ok(Self {
             bytes: VariableLengthVec::read(stream)?,
             _marker: PhantomData,

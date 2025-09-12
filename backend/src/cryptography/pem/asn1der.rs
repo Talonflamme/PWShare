@@ -278,8 +278,6 @@ fn decode_big_integer(iter: &mut impl Iterator<Item = u8>) -> Result<BigUint, &'
     let length = decode_length(iter)?;
     let bytes: Vec<u8> = iter.take(length).collect();
 
-    println!("Bytes: {:02x?}", bytes);
-
     if bytes[0] & 0x80 != 0 {
         // negative
         return Err("Negative number");
