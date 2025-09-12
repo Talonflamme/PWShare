@@ -75,22 +75,21 @@ fn encode_big_integer(integer: &BigUint) -> Vec<u8> {
 
     // Tag
     result.push(0x02); // Tag: Integer
-
-    // how many bytes can be skipped?
-    let mut skip: usize = 0;
-
     let bytes = integer.to_bytes_be();
 
-    // byte is 00 and next byte's MSB is also 0
-    while skip + 1 < bytes.len() && bytes[skip] == 0x00 && (bytes[skip + 1] & 0x80 == 0) {
-        skip += 1;
-    }
+    // bit 8 of first byte = 1 -> number is interpreted as negative, even though it isn't
+    // we need to prefix a zero byte to indicate that it is positive
+    let need_prefix = bytes[0] & 0x80 != 0;
 
     // Length
-    encode_length(bytes.len() - skip, &mut result);
+    encode_length(bytes.len() + usize::from(need_prefix), &mut result);
+
+    if need_prefix {
+        result.push(0x00);
+    }
 
     // value
-    result.extend_from_slice(&bytes[skip..]);
+    result.extend_from_slice(&bytes);
 
     result
 }
@@ -278,6 +277,8 @@ fn decode_big_integer(iter: &mut impl Iterator<Item = u8>) -> Result<BigUint, &'
 
     let length = decode_length(iter)?;
     let bytes: Vec<u8> = iter.take(length).collect();
+
+    println!("Bytes: {:02x?}", bytes);
 
     if bytes[0] & 0x80 != 0 {
         // negative
@@ -612,6 +613,7 @@ impl FromASN1DER for PrivateKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::bytes_from_hex;
     use num_traits::Num;
 
     #[test]
@@ -634,7 +636,7 @@ mod tests {
     }
 
     #[test]
-    fn test_long_integer() {
+    fn test_long_integer_encode() {
         assert_eq!(
             encode_big_integer(
                 &BigUint::from_str_radix("000102030405060708090a0b0c0d0e0f", 16).unwrap()
@@ -643,6 +645,50 @@ mod tests {
                 0x02, 0x0f, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
                 0x0d, 0x0e, 0x0f
             ]
+        );
+
+        assert_eq!(
+            encode_big_integer(
+                &BigUint::from_str_radix(
+                    "5838d9c49ae965ab1111a84e2abaedc8cd28037c1888cb25098ccb7caf2a6a52",
+                    16
+                )
+                .unwrap()
+            ),
+            bytes_from_hex("02205838d9c49ae965ab1111a84e2abaedc8cd28037c1888cb25098ccb7caf2a6a52")
+        );
+
+        assert_eq!(
+            encode_big_integer(
+                &BigUint::from_str_radix(
+                    "6a1ed0268c98b8abdd5cb6dbcb756907c9bdb7c8df81860aea24b03eeb7d1435",
+                    16
+                )
+                .unwrap()
+            ),
+            bytes_from_hex("02206a1ed0268c98b8abdd5cb6dbcb756907c9bdb7c8df81860aea24b03eeb7d1435")
+        );
+
+        assert_eq!(
+            encode_big_integer(
+                &BigUint::from_str_radix(
+                    "84b3090888f2430dee55119b437750a5a23fed465412a09db3bb3fe9149e46df",
+                    16
+                )
+                .unwrap()
+            ),
+            bytes_from_hex("02210084b3090888f2430dee55119b437750a5a23fed465412a09db3bb3fe9149e46df")
+        );
+
+        assert_eq!(
+            encode_big_integer(
+                &BigUint::from_str_radix(
+                    "e79beccf80ae0bdf8c15238c1d75156c48e2d1c70f0b952426d8caf471f809cd",
+                    16
+                )
+                .unwrap()
+            ),
+            bytes_from_hex("022100e79beccf80ae0bdf8c15238c1d75156c48e2d1c70f0b952426d8caf471f809cd")
         );
     }
 
@@ -761,6 +807,27 @@ mod tests {
             )
             .unwrap(),
             BigUint::from_str_radix("000102030405060708090a0b0c0d0e0f", 16).unwrap()
+        );
+
+        assert_eq!(
+            decode_big_integer(
+                &mut bytes_from_hex("0221009946349ffc55f8e3af7a8e6bb7bf3ce8bd56968c4e93127a5fd4c6549eaa87fd").into_iter()
+            ).unwrap(),
+            BigUint::from_str_radix("9946349ffc55f8e3af7a8e6bb7bf3ce8bd56968c4e93127a5fd4c6549eaa87fd", 16).unwrap()
+        );
+
+        assert_eq!(
+            decode_big_integer(
+                &mut bytes_from_hex("0220726ffc96035e5a54cf1c40b8748b9bad38d4bf67cebe865fb127f40506ecd200").into_iter()
+            ).unwrap(),
+            BigUint::from_str_radix("726ffc96035e5a54cf1c40b8748b9bad38d4bf67cebe865fb127f40506ecd200", 16).unwrap()
+        );
+
+        assert_eq!(
+            decode_big_integer(
+                &mut bytes_from_hex("022100df767a95048dd84fb9dff24d514e24368175e77c175086b94b9da17ac5bc1b41").into_iter()
+            ).unwrap(),
+            BigUint::from_str_radix("df767a95048dd84fb9dff24d514e24368175e77c175086b94b9da17ac5bc1b41", 16).unwrap()
         );
     }
 
