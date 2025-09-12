@@ -103,10 +103,8 @@ fn choose_e(lambda_n: &BigUint) -> BigUint {
 }
 
 // TODO: do massive speed ups here
-// TODO: only return private key, we don't need separate public.
-//  maybe make a function like .public() that returns a reference to a public key which builds on private key
 /// Generate the public and private keys. The key (i.e. modulus `n`) will have `key_size` bits.
-pub fn generate_keys(key_size: u64) -> (PublicKey, PrivateKey) {
+pub fn generate_key(key_size: u64) -> PrivateKey {
     //?  (1) Choose two large prime numbers p and q
     let (mut p, mut q) = generate_p_and_q(key_size);
 
@@ -122,8 +120,5 @@ pub fn generate_keys(key_size: u64) -> (PublicKey, PrivateKey) {
     //?  (5) Determine d as `d ≡ e^(-1) (mod λ(n))`
     let d = e.modinv(&lambda_n).unwrap();
 
-    let pub_key = PublicKey::new(n.clone(), e.clone());
-    let prv_key = PrivateKey::new(n, d, e, p, q);
-
-    (pub_key, prv_key)
+    PrivateKey::new(n, d, e, p, q)
 }

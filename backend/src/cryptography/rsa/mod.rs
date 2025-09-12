@@ -1,4 +1,4 @@
-pub use key_generation::generate_keys;
+pub use key_generation::generate_key;
 pub use private_key::PrivateKey;
 pub use public_key::PublicKey;
 pub(self) use sieve::Sieve;

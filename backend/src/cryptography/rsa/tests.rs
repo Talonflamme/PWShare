@@ -6,8 +6,8 @@ use num_traits::Num;
 #[test]
 // really slow in dev/test compile mod, use release for this
 fn test_key_generation() {
-    generate_keys(2048);
-    generate_keys(4096);
+    generate_key(2048);
+    generate_key(4096);
 }
 
 #[test]
