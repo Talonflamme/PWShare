@@ -12,7 +12,7 @@ impl PublicKey {
         Self { n, e }
     }
 
-    pub fn encode(&self, message_plain: BigUint) -> BigUint {
+    pub fn encrypt(&self, message_plain: BigUint) -> BigUint {
         assert!(
             self.n > message_plain,
             "Message representative out of range. m must be < n"
