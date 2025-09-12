@@ -1,4 +1,4 @@
-use crate::cryptography::rsa::{AdditionalPrivateKeyInfo, PrivateKey, PublicKey};
+use crate::cryptography::rsa::{PrivateKey, PublicKey};
 use num_bigint::BigUint;
 use num_traits::One;
 
@@ -453,34 +453,30 @@ impl PrivateKey {
         // modulus - n
         sequence.append(&mut encode_big_integer(&self.n));
 
-        let add_info = &self.add_info;
-
         // public exponent - e
-        sequence.append(&mut encode_big_integer(&add_info.e));
+        sequence.append(&mut encode_big_integer(&self.e));
 
         // private exponent - d
         sequence.append(&mut encode_big_integer(&self.d));
 
         // prime 1 - p
-        sequence.append(&mut encode_big_integer(&add_info.p));
+        sequence.append(&mut encode_big_integer(&self.p));
 
         // prime 2 - q
-        sequence.append(&mut encode_big_integer(&add_info.q));
+        sequence.append(&mut encode_big_integer(&self.q));
 
         // exponent 1 - d mod (p - 1)
         sequence.append(&mut encode_big_integer(
-            &(&self.d % (&add_info.p - &BigUint::one())),
+            &(&self.d % (&self.p - &BigUint::one())),
         ));
 
         // exponent 2 - d mod (q - 1)
         sequence.append(&mut encode_big_integer(
-            &(&self.d % (&add_info.q - BigUint::one())),
+            &(&self.d % (&self.q - BigUint::one())),
         ));
 
         // coefficient - (inverse of q) mod p
-        sequence.append(&mut encode_big_integer(
-            &add_info.q.modinv(&add_info.p).unwrap(),
-        ));
+        sequence.append(&mut encode_big_integer(&self.q.modinv(&self.p).unwrap()));
 
         encode_octet_string(encode_sequence(sequence))
     }
@@ -590,7 +586,7 @@ impl PrivateKey {
             return Err("Expected EOF");
         }
 
-        Ok(Self::new(n, d, AdditionalPrivateKeyInfo { e, p, q }))
+        Ok(Self::new(n, d, e, p, q))
     }
 }
 
@@ -615,8 +611,8 @@ impl FromASN1DER for PrivateKey {
 
 #[cfg(test)]
 mod tests {
-    use num_traits::Num;
     use super::*;
+    use num_traits::Num;
 
     #[test]
     fn test_integer() {
@@ -640,7 +636,9 @@ mod tests {
     #[test]
     fn test_long_integer() {
         assert_eq!(
-            encode_big_integer(&BigUint::from_str_radix("000102030405060708090a0b0c0d0e0f", 16).unwrap()),
+            encode_big_integer(
+                &BigUint::from_str_radix("000102030405060708090a0b0c0d0e0f", 16).unwrap()
+            ),
             vec![
                 0x02, 0x0f, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
                 0x0d, 0x0e, 0x0f

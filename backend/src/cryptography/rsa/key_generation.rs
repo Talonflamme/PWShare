@@ -1,6 +1,5 @@
 use super::{rabin_miller::MillerRabinTest, PrivateKey, PublicKey, Sieve};
 use crate::cryptography::rng::rng;
-use crate::cryptography::rsa::private_key::AdditionalPrivateKeyInfo;
 use num_bigint::{BigUint, RandBigInt};
 use num_integer::Integer;
 use num_traits::One;
@@ -72,6 +71,7 @@ fn compute_lambda(p: &mut BigUint, q: &mut BigUint) -> BigUint {
     lambda
 }
 
+// TODO: seems like e must be at least 65537 according to the standard..
 /// Choose an integer e such that 1 < e < λ(n) and gcd(e, λ(n))=1.
 /// The search starts at `2^16 + 1 = 65537` and goes down
 fn choose_e(lambda_n: &BigUint) -> BigUint {
@@ -102,20 +102,7 @@ fn choose_e(lambda_n: &BigUint) -> BigUint {
     }
 }
 
-macro_rules! generate_key {
-    ($bits: expr) => {{
-        const _ASSERT_DIV64: () = {
-            if $bits % 64 != 0 {
-                panic!("bits must be divisible by 64");
-            }
-        };
-
-        $crate::cryptography::rsa::key_generation::generate_keys::<{ $bits / 64 }>()
-    }};
-}
-
-pub(crate) use generate_key;
-
+// TODO: do massive speed ups here
 // TODO: only return private key, we don't need separate public.
 //  maybe make a function like .public() that returns a reference to a public key which builds on private key
 /// Generate the public and private keys. The key (i.e. modulus `n`) will have `key_size` bits.
@@ -136,7 +123,7 @@ pub fn generate_keys(key_size: u64) -> (PublicKey, PrivateKey) {
     let d = e.modinv(&lambda_n).unwrap();
 
     let pub_key = PublicKey::new(n.clone(), e.clone());
-    let prv_key = PrivateKey::new(n, d, AdditionalPrivateKeyInfo { e, p, q });
+    let prv_key = PrivateKey::new(n, d, e, p, q);
 
     (pub_key, prv_key)
 }

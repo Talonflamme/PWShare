@@ -6,19 +6,14 @@ use std::fmt::{Debug, Display};
 pub struct PrivateKey {
     pub n: BigUint,
     pub d: BigUint,
-    pub add_info: AdditionalPrivateKeyInfo,
-}
-
-#[derive(Debug)]
-pub struct AdditionalPrivateKeyInfo {
     pub e: BigUint,
     pub p: BigUint,
     pub q: BigUint,
 }
 
 impl PrivateKey {
-    pub fn new(n: BigUint, d: BigUint, add_info: AdditionalPrivateKeyInfo) -> Self {
-        Self { n, d, add_info }
+    pub fn new(n: BigUint, d: BigUint, e: BigUint, p: BigUint, q: BigUint) -> Self {
+        Self { n, d, e, p, q }
     }
 
     pub fn decode(&self, message_cipher: BigUint) -> BigUint {
