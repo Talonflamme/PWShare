@@ -41,6 +41,8 @@ impl<'a> RabinMillerTest<'a> {
         let s = candidate.trailing_zeros().unwrap() as usize;
         let d = &*(candidate) >> s;
 
+        candidate.set_bit(0, true); // make it the original again
+
         Self { candidate, s, d }
     }
 
