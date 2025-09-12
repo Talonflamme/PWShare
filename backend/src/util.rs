@@ -1,5 +1,5 @@
-use std::time::{Duration, SystemTime};
 use num_bigint::BigUint;
+use std::time::{Duration, SystemTime};
 
 pub fn time<T, F: Fn() -> T>(f: F) -> (Duration, T) {
     let start = SystemTime::now();
@@ -108,7 +108,13 @@ impl UintDisplay for &[u8] {
 }
 
 impl UintDisplay for Vec<u8> {
-    fn hex_with_sep(&self, sep: &str) -> String { self.as_slice().hex_with_sep(sep) }
+    fn hex(&self) -> String {
+        self.as_slice().hex()
+    }
+
+    fn hex_with_sep(&self, sep: &str) -> String {
+        self.as_slice().hex_with_sep(sep)
+    }
 
     fn radix(&self, radix: u32) -> Result<String, UintToRadixError> {
         self.as_slice().radix(radix)
