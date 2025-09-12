@@ -9,3 +9,5 @@ mod private_key;
 mod public_key;
 mod rabin_miller;
 mod sieve;
+#[cfg(test)]
+mod tests;

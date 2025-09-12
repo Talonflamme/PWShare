@@ -1,5 +1,6 @@
 use num_bigint::BigUint;
 use std::fmt::{Debug, Display};
+use crate::cryptography::rsa::PublicKey;
 
 // TODO: add bits field
 #[derive(Debug)]
@@ -23,6 +24,10 @@ impl PrivateKey {
         );
 
         message_cipher.modpow(&self.d, &self.n)
+    }
+    
+    pub fn public(&self) -> PublicKey {
+        PublicKey { n: self.n.clone(), e: self.e.clone() }
     }
 }
 
