@@ -80,7 +80,7 @@ fn decode_pre_master_secret(client_key_exchange: ClientKeyExchange) -> Result<Pr
             let uint = BigUint::from_bytes_be(bytes.as_slice());
             let padded = key.decode(uint).to_bytes_be();
 
-            let message = pkcs1_v1_5::unpad(&padded, 64 * 8).unwrap();
+            let message = pkcs1_v1_5::unpad(&padded, key.size_in_bytes()).unwrap();
             message
         })
 }

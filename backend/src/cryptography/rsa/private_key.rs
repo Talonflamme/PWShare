@@ -1,8 +1,7 @@
+use crate::cryptography::rsa::PublicKey;
 use num_bigint::BigUint;
 use std::fmt::{Debug, Display};
-use crate::cryptography::rsa::PublicKey;
 
-// TODO: add bits field
 #[derive(Debug)]
 pub struct PrivateKey {
     pub n: BigUint,
@@ -25,9 +24,17 @@ impl PrivateKey {
 
         message_cipher.modpow(&self.d, &self.n)
     }
-    
+
     pub fn public(&self) -> PublicKey {
-        PublicKey { n: self.n.clone(), e: self.e.clone() }
+        PublicKey {
+            n: self.n.clone(),
+            e: self.e.clone(),
+        }
+    }
+
+    /// The size of the RSA modulus `n` in bytes.
+    pub fn size_in_bytes(&self) -> usize {
+        self.n.bits().div_ceil(8) as usize
     }
 }
 
