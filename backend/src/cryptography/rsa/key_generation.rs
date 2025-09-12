@@ -1,4 +1,4 @@
-use super::{rabin_miller::RabinMillerTest, PrivateKey, PublicKey, Sieve};
+use super::{rabin_miller::MillerRabinTest, PrivateKey, PublicKey, Sieve};
 use crate::cryptography::rng::rng;
 use crate::cryptography::rsa::private_key::AdditionalPrivateKeyInfo;
 use num_bigint::{BigUint, RandBigInt};
@@ -38,7 +38,7 @@ fn generate_prime(num_bits: u64) -> BigUint {
 /// Checks if the given `candidate` is likely to be prime.
 /// Chance of a false-positive is less than 10^-6
 fn is_prime(candidate: &mut BigUint) -> bool {
-    let rabin_miller = RabinMillerTest::new(candidate);
+    let rabin_miller = MillerRabinTest::new(candidate);
     rabin_miller.is_prime(None)
 }
 

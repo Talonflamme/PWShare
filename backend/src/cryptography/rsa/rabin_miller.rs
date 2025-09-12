@@ -3,7 +3,7 @@ use num_bigint::{BigUint, RandBigInt};
 use num_integer::Integer;
 use num_traits::{One, Zero};
 
-pub struct RabinMillerTest<'a> {
+pub struct MillerRabinTest<'a> {
     candidate: &'a BigUint,
     /// candidate = 2^s * d + 1
     d: BigUint,
@@ -25,7 +25,7 @@ impl Primality {
     }
 }
 
-impl<'a> RabinMillerTest<'a> {
+impl<'a> MillerRabinTest<'a> {
     pub fn new(candidate: &'a mut BigUint) -> Self {
         if candidate.is_even() {
             panic!("RabinMillerTest on even number");
