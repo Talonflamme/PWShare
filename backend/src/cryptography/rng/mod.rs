@@ -1,9 +1,6 @@
-mod chacha;
-mod guts;
-
-pub use chacha::ChaCha8Rng;
-use crypto_bigint::rand_core::SeedableRng;
 use once_cell::sync::Lazy;
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 use std::sync::Mutex;
 
 pub static RNG: Lazy<Mutex<ChaCha8Rng>> = Lazy::new(|| {

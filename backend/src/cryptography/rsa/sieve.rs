@@ -1,35 +1,38 @@
-use crypto_bigint::{CheckedAdd, Uint};
-
-use super::precompute::{NUM_SMALL_PRIMES, SMALL_PRIMES, SmallPrimeType, RECIPROCALS};
+use std::ops::Rem;
+use super::precompute::{SmallPrimeType, NUM_SMALL_PRIMES, SMALL_PRIMES};
+use num_bigint::BigUint;
 
 /// Implementation of the Sieve of Eratosthenes algorithm.
 /// Works by selecting a set of small prime numbers. Each multiple is marked as a trivial number.
 /// The remaining ones are non-trivial numbers and (even though not safe) could be primes.
-pub(super) struct Sieve<const L: usize> {
+pub(super) struct Sieve {
     /// the last found non-trivial number
-    current: Uint<L>,
+    current: BigUint,
     // this slice is updated each iteration. Each entry represents the last checked number (mod p)
-    last_mod: [SmallPrimeType; NUM_SMALL_PRIMES]
+    last_mod: [SmallPrimeType; NUM_SMALL_PRIMES],
+    /// Max amount of bits
+    bits: u64
 }
 
-impl<const L: usize> Sieve<L> {
+impl Sieve {
     /// Creates a new Sieve starting at `start`.
     /// Note that `start` is <b>not</b> included in the iterator.
-    pub fn new(mut start: Uint<L>) -> Self {
-        start |= Uint::ONE; // make sure it's odd
+    /// `bits` - the max amount of bits for any BigUint returned by this.
+    pub fn new(mut start: BigUint, bits: u64) -> Self {
+        start.set_bit(0, true); // make sure it's odd
 
         let mut last_mod = [0; NUM_SMALL_PRIMES];
 
         // make each value the biggest multiple of the corresponding prime that is less/equal than start
         last_mod.iter_mut().enumerate().for_each(|(i, x)| {
-            // let rem = start.rem(&prime);
-            let rem = start.rem_limb_with_reciprocal(&RECIPROCALS[i]);
-            *x = rem.0 as SmallPrimeType;
+            let rem = (&start).rem(SMALL_PRIMES[i]);
+            *x = rem.try_into().unwrap();
         });
-        
-        Sieve::<L> {
+
+        Sieve {
             current: start,
-            last_mod
+            last_mod,
+            bits
         }
     }
 
@@ -52,32 +55,33 @@ impl<const L: usize> Sieve<L> {
                 *m = 0;
             }
         }
-        
+
         !trivial
     }
 }
 
-impl<const L: usize> Iterator for Sieve<L> {
-    type Item = Uint<L>;
+impl Iterator for Sieve {
+    type Item = BigUint;
 
     fn next(&mut self) -> Option<Self::Item> {
         let increment: SmallPrimeType = 2; // how much we move current each iteration
 
         // we increment self.current until we find a value, that is not a multiple of any prime
         loop {
-            if let Some(next) = self.current.checked_add(&Uint::from(increment)).into_option() {
-                let non_trivial = self.update_progress(increment);
+            let next = (&self.current) + &increment;
 
-                self.current = next;
-
-                if non_trivial {
-                    return Some(self.current);
-                }
-                // else: number is trivial (= composite; divisible by any of the first few primes)
-            } else {
-                // overflow: we are done
+            if next.bits() > self.bits {
                 return None;
             }
+
+            let non_trivial = self.update_progress(increment);
+
+            self.current = next;
+
+            if non_trivial {
+                return Some(self.current.clone());
+            }
+            // else: number is trivial (= composite; divisible by any of the first few primes)
         }
     }
 }

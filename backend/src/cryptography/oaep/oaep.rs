@@ -1,5 +1,5 @@
+use rand::RngCore;
 use crate::cryptography::rng::rng;
-use crypto_bigint::rand_core::RngCore;
 use crate::cryptography::oaep::hashing::{HashFunction, Sha256};
 use crate::cryptography::oaep::mgf1;
 

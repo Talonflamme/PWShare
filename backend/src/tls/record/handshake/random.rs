@@ -1,5 +1,6 @@
-use crypto_bigint::rand_core::{OsRng, RngCore};
 use pwshare_macros::{ReadableFromStream, WritableToSink};
+use rand::rngs::OsRng;
+use rand_chacha::rand_core::RngCore;
 
 #[derive(Debug, PartialEq, Eq, ReadableFromStream, WritableToSink)]
 pub struct Random {

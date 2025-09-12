@@ -17,11 +17,11 @@ use crate::tls::record::{
 };
 use crate::tls::WritableToSink;
 use crate::util::UintDisplay;
-use crypto_bigint::{BitOps, Uint};
 use std::fs;
 use std::io::{Error, ErrorKind, Result, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
+use num_bigint::BigUint;
 
 // TODO: eventually, we need to separate errors from IO and errors in the bytes supplied, in which
 //  case we would send back an Error. Actually, we might even send it regardless.
@@ -70,15 +70,15 @@ fn handle_client(mut stream: TcpStream) -> Result<()> {
 
 fn decode_pre_master_secret(client_key_exchange: ClientKeyExchange) -> Result<PreMasterSecret> {
     let key_content = fs::read_to_string("private_key.pem")?;
-    let key = PrivateKey::<64>::from_pem_content(key_content)
+    let key = PrivateKey::from_pem_content(key_content)
         .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
 
     client_key_exchange
         .exchange_keys
         .pre_master_secret
         .decrypt(move |bytes| {
-            let uint = Uint::<64>::from_be_slice(bytes.as_slice());
-            let padded = key.decode(uint).to_be_bytes();
+            let uint = BigUint::from_bytes_be(bytes.as_slice());
+            let padded = key.decode(uint).to_bytes_be();
 
             let message = pkcs1_v1_5::unpad(&padded, 64 * 8).unwrap();
             message

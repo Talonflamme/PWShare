@@ -4,7 +4,6 @@ pub use key_generation::{generate_keys};
 pub(self) use sieve::Sieve;
 
 pub mod key_generation;
-mod lcm;
 mod precompute;
 mod private_key;
 mod public_key;

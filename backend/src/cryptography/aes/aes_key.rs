@@ -1,7 +1,7 @@
 use crate::cryptography::aes::aes::AES;
 use crate::cryptography::aes::sbox::SBOX;
 use crate::cryptography::rng::rng;
-use crypto_bigint::rand_core::RngCore;
+use rand::RngCore;
 use std::fmt::{Display, Formatter};
 
 pub trait AESKey: Clone {
@@ -105,10 +105,12 @@ macro_rules! impl_aes_key {
                 let mut round_keys = Vec::with_capacity(Self::R);
 
                 for i in 0..Self::R {
-                    round_keys.push((w[4 * i] as u128) << 96
-                        | (w[4 * i + 1] as u128) << 64
-                        | (w[4 * i + 2] as u128) << 32
-                        | (w[4 * i + 3] as u128));
+                    round_keys.push(
+                        (w[4 * i] as u128) << 96
+                            | (w[4 * i + 1] as u128) << 64
+                            | (w[4 * i + 2] as u128) << 32
+                            | (w[4 * i + 3] as u128),
+                    );
                 }
 
                 round_keys

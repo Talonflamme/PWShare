@@ -1,16 +1,14 @@
-use crypto_bigint::modular::{MontyForm, MontyParams};
-use crypto_bigint::{CheckedAdd, Integer, NonZero, Odd, RandomMod, Uint};
 use crate::cryptography::rng::rng;
+use num_bigint::{BigUint, RandBigInt};
+use num_integer::Integer;
+use num_traits::{One, Zero};
 
-pub struct RabinMillerTest<const L: usize> {
-    candidate: Uint<L>,
-    montgomery_terms: MontyParams<L>,
+pub struct RabinMillerTest {
+    candidate: BigUint,
     /// candidate = 2^s * d + 1
-    d: Uint<L>,
+    d: BigUint,
     /// candidate = 2^s * d + 1
     s: usize,
-    one: MontyForm<L>,
-    minus_one: MontyForm<L>,
 }
 pub enum Primality {
     ProbablyPrime,
@@ -26,25 +24,23 @@ impl Primality {
     }
 }
 
-impl<const L: usize> RabinMillerTest<L> {
-    pub fn new(candidate: Uint<L>) -> Self {
-        let odd = Odd::new(candidate).unwrap();
-        let params = MontyParams::new_vartime(odd);
-
-        let candidate_1 = candidate.wrapping_sub(&Uint::ONE);
-        // make candidate = 2^s * d + 1
-        let s = candidate_1.trailing_zeros() as usize;
-        let d = candidate_1 >> s;
-        let one = MontyForm::one(params);
-
-        RabinMillerTest {
-            candidate,
-            montgomery_terms: params,
-            s,
-            d,
-            minus_one: -one,
-            one,
+impl RabinMillerTest {
+    pub fn new(mut candidate: BigUint) -> Self {
+        if candidate.is_even() {
+            panic!("RabinMillerTest on even number");
         }
+
+        if candidate.is_one() {
+            panic!("RabinMillerTest on `1`");
+        }
+
+        candidate.set_bit(0, false); // subtract 1, make it even
+
+        // make candidate = 2^s * d + 1
+        let s = candidate.trailing_zeros().unwrap() as usize;
+        let d = (&candidate) >> s;
+
+        Self { candidate, s, d }
     }
 
     /// Determines if self.candidate is a (probable) prime.
@@ -55,20 +51,30 @@ impl<const L: usize> RabinMillerTest<L> {
     /// Each iteration has a success chance of 3/4
     /// Hence, the chance for a false-positive after k rounds is (1/4)^k
     pub fn is_prime(&self, k: Option<usize>) -> bool {
-        if &self.candidate <= &Uint::ONE {
+        if self.candidate.is_one() || self.candidate.is_zero() {
             return false; // 1 and 0
-        } else if &self.candidate <= &Uint::from(3u8) {
+        }
+
+        let three = BigUint::from(3u8);
+
+        if &self.candidate <= &three {
             return true; // 2 and 3
-        } else if self.candidate.is_even().into() {
+        }
+
+        if self.candidate.is_even() {
             return false;
         }
 
         let k = k.unwrap_or(10);
 
         assert!(k > 0, "k must be at least 1");
+        let candidate_minus_one = &self.candidate - &BigUint::one();
 
-        // first, test 2
-        if !self.test_once(&Uint::from(2u8)).is_probably_prime() {
+        // first, test a=2
+        if !self
+            .test_once(&BigUint::from(2u8), &candidate_minus_one)
+            .is_probably_prime()
+        {
             return false;
         }
 
@@ -76,14 +82,10 @@ impl<const L: usize> RabinMillerTest<L> {
         for _ in 1..k {
             // select random value from [3, candidate - 1)
             // we have already tested 2 and the cases 1 and candidate - 1 don't make sense.
-            let range_size = self.candidate.wrapping_sub(&Uint::from(4u8));
-            let range_non_zero = NonZero::new(range_size).unwrap();
 
-            let a = Uint::random_mod(&mut rng!(), &range_non_zero)
-                .checked_add(&Uint::from(3u8))
-                .expect("Integer overflow");
+            let a = rng!().gen_biguint_range(&three, &candidate_minus_one);
 
-            if !self.test_once(&a).is_probably_prime() {
+            if !self.test_once(&a, &candidate_minus_one).is_probably_prime() {
                 return false;
             }
         }
@@ -93,22 +95,23 @@ impl<const L: usize> RabinMillerTest<L> {
 
     /// Do one iteration of the RabinMiller Test using the number a.
     /// Assumes a < candidate
-    pub fn test_once(&self, a: &Uint<L>) -> Primality {
+    pub fn test_once(&self, a: &BigUint, candidate_minus_one: &BigUint) -> Primality {
         debug_assert!(a < &self.candidate, "a must be < candidate");
 
-        let residue = MontyForm::new(a, self.montgomery_terms);
+        let mut rem = a.modpow(&self.d, &self.candidate);
 
-        let mut rem = residue.pow(&self.d);
-
-        if rem == self.one || rem == self.minus_one {
+        if rem.is_one() || &rem == candidate_minus_one {
             return Primality::ProbablyPrime;
         }
 
+        let two = BigUint::from(2u8);
+
         for _ in 1..self.s {
-            rem = rem.square();
-            if rem == self.one {
+            rem = rem.modpow(&two, &self.candidate);
+
+            if rem.is_one() {
                 return Primality::Composite;
-            } else if rem == self.minus_one {
+            } else if &rem == candidate_minus_one {
                 return Primality::ProbablyPrime;
             }
         }

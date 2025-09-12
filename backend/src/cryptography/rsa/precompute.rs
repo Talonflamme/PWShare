@@ -1,5 +1,3 @@
-use crypto_bigint::{Limb, NonZero, Reciprocal, Word};
-
 pub const NUM_SMALL_PRIMES: usize = 2047;
 
 /// Type that all of the primes below fit in.
@@ -146,19 +144,3 @@ pub const SMALL_PRIMES: [SmallPrimeType; NUM_SMALL_PRIMES] = [
     17599, 17609, 17623, 17627, 17657, 17659, 17669, 17681, 17683, 17707, 17713, 17729, 17737,
     17747, 17749, 17761, 17783, 17789, 17791, 17807, 17827, 17837, 17839, 17851, 17863,
 ];
-
-const fn create_reciprocals() -> [Reciprocal; NUM_SMALL_PRIMES] {
-    let mut result = [Reciprocal::default(); NUM_SMALL_PRIMES];
-    let mut i = 0;
-
-    while i < NUM_SMALL_PRIMES {
-        let limb = Limb(SMALL_PRIMES[i] as Word);
-        
-        result[i] = Reciprocal::new(NonZero::<Limb>::new_unwrap(limb));
-        i += 1;
-    }
-
-    result
-}
-
-pub const RECIPROCALS: [Reciprocal; NUM_SMALL_PRIMES] = create_reciprocals();

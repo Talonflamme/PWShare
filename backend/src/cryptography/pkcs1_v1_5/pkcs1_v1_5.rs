@@ -1,5 +1,5 @@
+use rand::RngCore;
 use crate::cryptography::rng::rng;
-use crypto_bigint::rand_core::RngCore;
 
 #[derive(Debug)]
 pub struct PKCS1v1_5EncodingError {

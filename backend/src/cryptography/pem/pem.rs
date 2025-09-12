@@ -1,7 +1,6 @@
 use crate::cryptography::pem::asn1der::{FromASN1DER, ToASN1DER};
 use crate::cryptography::pem::base64::{base64decode, base64encode};
 use crate::cryptography::rsa::{PrivateKey, PublicKey};
-use crypto_bigint::{Encoding, InvMod, Uint};
 
 pub trait ToPemContent {
     fn to_pem_content(&self) -> String;
@@ -23,11 +22,7 @@ fn insert_newlines(s: String, line_length: usize) -> String {
     result
 }
 
-impl<const L: usize> ToPemContent for PublicKey<L>
-where
-    Uint<L>: Encoding,
-    <Uint<L> as Encoding>::Repr: AsRef<[u8]>,
-{
+impl ToPemContent for PublicKey {
     fn to_pem_content(&self) -> String {
         let asn1der_repr = self.to_asn1_der();
         let b64 = base64encode(asn1der_repr.as_slice());
@@ -45,12 +40,7 @@ where
     }
 }
 
-impl<const L: usize> ToPemContent for PrivateKey<L>
-where
-    Uint<L>: Encoding,
-    <Uint<L> as Encoding>::Repr: AsRef<[u8]>,
-    Uint<L>: InvMod<Output = Uint<L>>,
-{
+impl ToPemContent for PrivateKey {
     fn to_pem_content(&self) -> String {
         let asn1der_repr = self.to_asn1_der();
         let b64 = base64encode(asn1der_repr.as_slice());
@@ -91,9 +81,7 @@ pub trait FromPemContent: Sized {
     fn from_pem_content(content: String) -> Result<Self, &'static str>;
 }
 
-// TODO: potentially add version to match the PKCS#1 RSA key definition
-
-impl<const L: usize> FromPemContent for PublicKey<L> {
+impl FromPemContent for PublicKey {
     fn from_pem_content(content: String) -> Result<Self, &'static str> {
         let content = find_content_between_header(
             content,
@@ -108,10 +96,7 @@ impl<const L: usize> FromPemContent for PublicKey<L> {
     }
 }
 
-impl<const L: usize> FromPemContent for PrivateKey<L>
-where
-    Uint<L>: InvMod<Output = Uint<L>>,
-{
+impl FromPemContent for PrivateKey {
     fn from_pem_content(content: String) -> Result<Self, &'static str> {
         let content = find_content_between_header(
             content,

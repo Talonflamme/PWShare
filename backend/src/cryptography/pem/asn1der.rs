@@ -1,5 +1,6 @@
 use crate::cryptography::rsa::{AdditionalPrivateKeyInfo, PrivateKey, PublicKey};
-use crypto_bigint::{Encoding, InvMod, Uint};
+use num_bigint::BigUint;
+use num_traits::One;
 
 fn encode_length(length: usize, result: &mut Vec<u8>) {
     if length <= 127 {
@@ -69,10 +70,7 @@ fn decode_null(iter: &mut impl Iterator<Item = u8>) -> Result<(), &'static str> 
     Ok(())
 }
 
-fn encode_big_integer<const L: usize>(integer: Uint<L>) -> Vec<u8>
-where
-    Uint<L>: Encoding<Repr: AsRef<[u8]>>,
-{
+fn encode_big_integer(integer: &BigUint) -> Vec<u8> {
     let mut result = Vec::new();
 
     // Tag
@@ -81,8 +79,7 @@ where
     // how many bytes can be skipped?
     let mut skip: usize = 0;
 
-    let bytes_owner = integer.to_be_bytes();
-    let bytes = bytes_owner.as_ref();
+    let bytes = integer.to_bytes_be();
 
     // byte is 00 and next byte's MSB is also 0
     while skip + 1 < bytes.len() && bytes[skip] == 0x00 && (bytes[skip + 1] & 0x80 == 0) {
@@ -272,9 +269,7 @@ fn decode_integer(iter: &mut impl Iterator<Item = u8>) -> Result<i64, &'static s
     Ok(i64::from_be_bytes(result))
 }
 
-fn decode_big_integer<const L: usize>(
-    iter: &mut impl Iterator<Item = u8>,
-) -> Result<Uint<L>, &'static str> {
+fn decode_big_integer(iter: &mut impl Iterator<Item = u8>) -> Result<BigUint, &'static str> {
     let tag = iter.next().ok_or("0x02 expected, none found")?;
 
     if tag != 0x02 {
@@ -284,17 +279,12 @@ fn decode_big_integer<const L: usize>(
     let length = decode_length(iter)?;
     let bytes: Vec<u8> = iter.take(length).collect();
 
-    let mut result = if bytes[0] & 0x80 == 0 {
-        // positive
-        vec![0u8; Uint::<L>::BYTES]
-    } else {
+    if bytes[0] & 0x80 != 0 {
         // negative
-        vec![0xff; Uint::<L>::BYTES]
-    };
+        return Err("Negative number");
+    }
 
-    result[Uint::<L>::BYTES - length..].copy_from_slice(&bytes);
-
-    Ok(Uint::from_be_slice(&result))
+    Ok(BigUint::from_bytes_be(&bytes))
 }
 
 fn decode_sequence(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u8>, &'static str> {
@@ -393,24 +383,21 @@ fn decode_rsa_algorithm_identifier(
     Ok(())
 }
 
-impl<const L: usize> PublicKey<L>
-where
-    Uint<L>: Encoding<Repr: AsRef<[u8]>>,
-{
+impl PublicKey {
     fn asn1_rsa_public_key(&self) -> Vec<u8> {
         let mut sequence = Vec::new();
 
         // modulus - n
-        sequence.append(&mut encode_big_integer(self.n));
+        sequence.append(&mut encode_big_integer(&self.n));
 
         // public exponent - e
-        sequence.append(&mut encode_big_integer(self.e));
+        sequence.append(&mut encode_big_integer(&self.e));
 
         encode_bit_string(encode_sequence(sequence))
     }
 }
 
-impl<const L: usize> PublicKey<L> {
+impl PublicKey {
     fn decode_rsa_public_key(iter: &mut impl Iterator<Item = u8>) -> Result<Self, &'static str> {
         let bit_string = decode_bit_string(iter)?;
 
@@ -428,8 +415,8 @@ impl<const L: usize> PublicKey<L> {
 
         let mut iter = sequence.into_iter();
 
-        let n: Uint<L> = decode_big_integer(&mut iter)?;
-        let e: Uint<L> = decode_big_integer(&mut iter)?;
+        let n = decode_big_integer(&mut iter)?;
+        let e = decode_big_integer(&mut iter)?;
 
         if iter.next().is_some() {
             return Err("Expected EOF");
@@ -439,10 +426,7 @@ impl<const L: usize> PublicKey<L> {
     }
 }
 
-impl<const L: usize> ToASN1DER for PublicKey<L>
-where
-    Uint<L>: Encoding<Repr: AsRef<[u8]>>,
-{
+impl ToASN1DER for PublicKey {
     fn to_asn1_der(&self) -> Vec<u8> {
         let mut algorithm_identifier = asn1_rsa_algorithm_identifier();
         let mut public_key = self.asn1_rsa_public_key();
@@ -455,11 +439,7 @@ where
     }
 }
 
-impl<const L: usize> PrivateKey<L>
-where
-    Uint<L>: Encoding<Repr: AsRef<[u8]>>,
-    Uint<L>: InvMod<Output = Uint<L>>,
-{
+impl PrivateKey {
     fn asn1_version() -> Vec<u8> {
         encode_integer(0)
     }
@@ -471,42 +451,42 @@ where
         sequence.append(&mut encode_integer(0));
 
         // modulus - n
-        sequence.append(&mut encode_big_integer(self.n));
+        sequence.append(&mut encode_big_integer(&self.n));
 
         let add_info = &self.add_info;
 
         // public exponent - e
-        sequence.append(&mut encode_big_integer(add_info.e));
+        sequence.append(&mut encode_big_integer(&add_info.e));
 
         // private exponent - d
-        sequence.append(&mut encode_big_integer(self.d));
+        sequence.append(&mut encode_big_integer(&self.d));
 
         // prime 1 - p
-        sequence.append(&mut encode_big_integer(add_info.p));
+        sequence.append(&mut encode_big_integer(&add_info.p));
 
         // prime 2 - q
-        sequence.append(&mut encode_big_integer(add_info.q));
+        sequence.append(&mut encode_big_integer(&add_info.q));
 
         // exponent 1 - d mod (p - 1)
-        sequence.append(&mut encode_big_integer(self.d % (add_info.p - Uint::ONE)));
+        sequence.append(&mut encode_big_integer(
+            &(&self.d % (&add_info.p - &BigUint::one())),
+        ));
 
         // exponent 2 - d mod (q - 1)
-        sequence.append(&mut encode_big_integer(self.d % (add_info.q - Uint::ONE)));
+        sequence.append(&mut encode_big_integer(
+            &(&self.d % (&add_info.q - BigUint::one())),
+        ));
 
         // coefficient - (inverse of q) mod p
         sequence.append(&mut encode_big_integer(
-            add_info.q.inv_mod(&add_info.p).unwrap(),
+            &add_info.q.modinv(&add_info.p).unwrap(),
         ));
 
         encode_octet_string(encode_sequence(sequence))
     }
 }
 
-impl<const L: usize> ToASN1DER for PrivateKey<L>
-where
-    Uint<L>: Encoding<Repr: AsRef<[u8]>>,
-    Uint<L>: InvMod<Output = Uint<L>>,
-{
+impl ToASN1DER for PrivateKey {
     fn to_asn1_der(&self) -> Vec<u8> {
         let mut version = Self::asn1_version();
         let mut algorithm_identifier = asn1_rsa_algorithm_identifier();
@@ -525,7 +505,7 @@ pub trait FromASN1DER: Sized {
     fn from_asn1_der(bytes: impl IntoIterator<Item = u8>) -> Result<Self, &'static str>;
 }
 
-impl<const L: usize> FromASN1DER for PublicKey<L> {
+impl FromASN1DER for PublicKey {
     fn from_asn1_der(bytes: impl IntoIterator<Item = u8>) -> Result<Self, &'static str> {
         let mut iter = bytes.into_iter();
 
@@ -541,10 +521,7 @@ impl<const L: usize> FromASN1DER for PublicKey<L> {
     }
 }
 
-impl<const L: usize> PrivateKey<L>
-where
-    Uint<L>: InvMod<Output = Uint<L>>,
-{
+impl PrivateKey {
     fn decode_version(
         iter: &mut impl Iterator<Item = u8>,
         expected: i64,
@@ -575,37 +552,37 @@ where
         Self::decode_version(&mut iter, 0)?;
 
         // modulus - n
-        let n: Uint<L> = decode_big_integer(&mut iter)?;
+        let n = decode_big_integer(&mut iter)?;
 
         // public exponent - e
-        let e: Uint<L> = decode_big_integer(&mut iter)?;
+        let e = decode_big_integer(&mut iter)?;
 
         // private exponent - d
-        let d: Uint<L> = decode_big_integer(&mut iter)?;
+        let d = decode_big_integer(&mut iter)?;
 
         // prime 1 - p
-        let p: Uint<L> = decode_big_integer(&mut iter)?;
+        let p = decode_big_integer(&mut iter)?;
         // prime 2 - q
-        let q: Uint<L> = decode_big_integer(&mut iter)?;
+        let q = decode_big_integer(&mut iter)?;
 
         // exponent 1 - d mod (p - 1)
-        let exp1: Uint<L> = decode_big_integer(&mut iter)?;
+        let exp1 = decode_big_integer(&mut iter)?;
 
-        if (d % (p - Uint::ONE)) != exp1 {
+        if (&d % (&p - BigUint::one())) != exp1 {
             return Err("Exponent 1 does not match `d mod (p - 1)`");
         }
 
         // exponent 2 - d mod (q - 1)
-        let exp2: Uint<L> = decode_big_integer(&mut iter)?;
+        let exp2 = decode_big_integer(&mut iter)?;
 
-        if (d % (q - Uint::ONE)) != exp2 {
+        if (&d % (&q - BigUint::one())) != exp2 {
             return Err("Exponent 2 does not match `d mod (q - 1)`");
         }
 
         // coefficient - (inverse of q) mod p
-        let coeff: Uint<L> = decode_big_integer(&mut iter)?;
+        let coeff = decode_big_integer(&mut iter)?;
 
-        if q.inv_mod(&p).unwrap() != coeff {
+        if q.modinv(&p).unwrap() != coeff {
             return Err("Coefficient does not match `(inv q) mod p`");
         }
 
@@ -617,10 +594,7 @@ where
     }
 }
 
-impl<const L: usize> FromASN1DER for PrivateKey<L>
-where
-    Uint<L>: InvMod<Output = Uint<L>>,
-{
+impl FromASN1DER for PrivateKey {
     fn from_asn1_der(bytes: impl IntoIterator<Item = u8>) -> Result<Self, &'static str> {
         let mut iter = bytes.into_iter();
 
@@ -641,6 +615,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use num_traits::Num;
     use super::*;
 
     #[test]
@@ -665,7 +640,7 @@ mod tests {
     #[test]
     fn test_long_integer() {
         assert_eq!(
-            encode_big_integer(Uint::<2>::from_be_hex("000102030405060708090a0b0c0d0e0f")),
+            encode_big_integer(&BigUint::from_str_radix("000102030405060708090a0b0c0d0e0f", 16).unwrap()),
             vec![
                 0x02, 0x0f, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
                 0x0d, 0x0e, 0x0f
@@ -787,7 +762,7 @@ mod tests {
                 .into_iter()
             )
             .unwrap(),
-            Uint::<2>::from_be_hex("000102030405060708090a0b0c0d0e0f")
+            BigUint::from_str_radix("000102030405060708090a0b0c0d0e0f", 16).unwrap()
         );
     }
 

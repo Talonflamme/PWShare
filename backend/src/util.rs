@@ -1,6 +1,5 @@
 use std::time::{Duration, SystemTime};
-
-use crypto_bigint::{NonZero, Uint, Zero};
+use num_bigint::BigUint;
 
 pub fn time<T, F: Fn() -> T>(f: F) -> (Duration, T) {
     let start = SystemTime::now();
@@ -36,32 +35,17 @@ pub trait UintDisplay {
     fn radix(&self, radix: u32) -> Result<String, UintToRadixError>;
 }
 
-impl<const L: usize> UintDisplay for Uint<L> {
+impl UintDisplay for BigUint {
     fn hex_with_sep(&self, _: &str) -> String {
         self.hex()
     }
 
     fn radix(&self, radix: u32) -> Result<String, UintToRadixError> {
-        let mut clone = self.clone();
-
-        let non_zero = NonZero::new(Uint::<L>::from(radix)).unwrap();
-        let mut string = String::new();
-
-        while (!clone.is_zero()).into() {
-            let (div, rem) = clone.div_rem(&non_zero);
-            clone = div;
-            let remainder = rem.as_words()[0] as u32;
-
-            let ch = char::from_digit(remainder, radix).ok_or(UintToRadixError {})?;
-            string.push(ch);
-        }
-
-        // rev string
-        Ok(string.chars().rev().collect())
+        Ok(self.to_str_radix(radix))
     }
 }
 
-impl<const L: usize> UintDisplay for Vec<Uint<L>> {
+impl UintDisplay for Vec<BigUint> {
     fn hex_with_sep(&self, sep: &str) -> String {
         self.iter()
             .map(|uint| uint.hex())
