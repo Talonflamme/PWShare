@@ -21,14 +21,14 @@ fn generate_prime(num_bits: u64) -> BigUint {
         // So we only call `is_prime` on candidates that are not divisible by any of the first 2048 primes.
         let sieve = Sieve::new(start, num_bits);
 
-        for num in sieve {
+        for mut num in sieve {
             let bits = num.bits();
 
             if bits > num_bits {
                 break; // we looked too far. The number exceeded the max of 2^(num_bits).
             }
 
-            if is_prime(&num) {
+            if is_prime(&mut num) {
                 return num;
             }
         }
@@ -37,8 +37,8 @@ fn generate_prime(num_bits: u64) -> BigUint {
 
 /// Checks if the given `candidate` is likely to be prime.
 /// Chance of a false-positive is less than 10^-6
-fn is_prime(candidate: &BigUint) -> bool {
-    let rabin_miller = RabinMillerTest::new(candidate.clone());
+fn is_prime(candidate: &mut BigUint) -> bool {
+    let rabin_miller = RabinMillerTest::new(candidate);
     rabin_miller.is_prime(None)
 }
 

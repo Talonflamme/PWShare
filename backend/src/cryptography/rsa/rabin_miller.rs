@@ -3,13 +3,14 @@ use num_bigint::{BigUint, RandBigInt};
 use num_integer::Integer;
 use num_traits::{One, Zero};
 
-pub struct RabinMillerTest {
-    candidate: BigUint,
+pub struct RabinMillerTest<'a> {
+    candidate: &'a BigUint,
     /// candidate = 2^s * d + 1
     d: BigUint,
     /// candidate = 2^s * d + 1
     s: usize,
 }
+
 pub enum Primality {
     ProbablyPrime,
     Composite,
@@ -24,8 +25,8 @@ impl Primality {
     }
 }
 
-impl RabinMillerTest {
-    pub fn new(mut candidate: BigUint) -> Self {
+impl<'a> RabinMillerTest<'a> {
+    pub fn new(candidate: &'a mut BigUint) -> Self {
         if candidate.is_even() {
             panic!("RabinMillerTest on even number");
         }
@@ -38,7 +39,7 @@ impl RabinMillerTest {
 
         // make candidate = 2^s * d + 1
         let s = candidate.trailing_zeros().unwrap() as usize;
-        let d = (&candidate) >> s;
+        let d = &*(candidate) >> s;
 
         Self { candidate, s, d }
     }
@@ -57,7 +58,7 @@ impl RabinMillerTest {
 
         let three = BigUint::from(3u8);
 
-        if &self.candidate <= &three {
+        if self.candidate <= &three {
             return true; // 2 and 3
         }
 
@@ -68,7 +69,7 @@ impl RabinMillerTest {
         let k = k.unwrap_or(10);
 
         assert!(k > 0, "k must be at least 1");
-        let candidate_minus_one = &self.candidate - &BigUint::one();
+        let candidate_minus_one = self.candidate - &BigUint::one();
 
         // first, test a=2
         if !self
