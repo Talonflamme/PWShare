@@ -49,9 +49,9 @@ where
 {
     pub fn decrypt<F>(self, decrypt_func: F) -> Result<T>
     where
-        F: FnOnce(Vec<u8>) -> Vec<u8>,
+        F: FnOnce(Vec<u8>) -> Result<Vec<u8>>,
     {
-        let decrypted_bytes = decrypt_func(self.bytes.into());
+        let decrypted_bytes = decrypt_func(self.bytes.into())?;
         let mut iter = decrypted_bytes.into_iter();
 
         let t = T::read(&mut iter)?;

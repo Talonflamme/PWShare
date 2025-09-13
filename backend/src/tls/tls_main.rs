@@ -17,11 +17,11 @@ use crate::tls::record::{
 };
 use crate::tls::WritableToSink;
 use crate::util::UintDisplay;
+use num_bigint::BigUint;
 use std::fs;
 use std::io::{Error, ErrorKind, Result, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
-use num_bigint::BigUint;
 
 // TODO: eventually, we need to separate errors from IO and errors in the bytes supplied, in which
 //  case we would send back an Error. Actually, we might even send it regardless.
@@ -77,10 +77,14 @@ fn decode_pre_master_secret(client_key_exchange: ClientKeyExchange) -> Result<Pr
         .exchange_keys
         .pre_master_secret
         .decrypt(move |bytes| {
-            let padded = key.decrypt_bytes(bytes.as_slice()).unwrap();
+            let padded = key
+                .decrypt_bytes(bytes.as_slice())
+                .map_err(|e| Error::new(ErrorKind::Other, format!("Decryption failed: {:?}", e)))?;
 
-            let message = pkcs1_v1_5::unpad(&padded, key.size_in_bytes()).unwrap();
-            message
+            let message = pkcs1_v1_5::unpad(&padded, key.size_in_bytes())
+                .map_err(|e| Error::new(ErrorKind::Other, format!("Unpadding failed: {:?}", e)))?;
+
+            Ok(message)
         })
 }
 
