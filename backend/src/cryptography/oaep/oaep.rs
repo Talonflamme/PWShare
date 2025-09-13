@@ -49,7 +49,7 @@ pub fn pad(message: &[u8], k: usize) -> Result<Vec<u8>, OAEPEncodingError> {
     let hash = Sha256;
 
     // length of output of hash function in bytes
-    let h_len = hash.h_len();
+    let h_len = hash.h_len() as usize;
 
     // length of message in bytes, with:
     // m_len <= k - 2 * h_len - 2
@@ -132,7 +132,7 @@ pub fn unpad(padded_message: &[u8], k: usize) -> Result<Vec<u8>, OAEPDecodingErr
     let hash = Sha256;
 
     // length of output of hash function in bytes
-    let h_len = hash.h_len();
+    let h_len = hash.h_len() as usize;
 
     // optional label, usually an empty string
     let l = ""; // label
