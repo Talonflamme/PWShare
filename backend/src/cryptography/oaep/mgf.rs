@@ -1,4 +1,4 @@
-use crate::cryptography::oaep::hashing::HashFunction;
+use crate::cryptography::hashing::HashFunction;
 
 /// Applies the mgf1 algorithm over `hash`. The `seed` is transformed and the result
 /// will have a length of `length` bytes.

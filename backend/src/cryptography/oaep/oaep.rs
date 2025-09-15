@@ -1,6 +1,6 @@
 use rand::RngCore;
 use crate::cryptography::rng::rng;
-use crate::cryptography::oaep::hashing::{HashFunction, Sha256};
+use crate::cryptography::hashing::{HashFunction, Sha256};
 use crate::cryptography::oaep::mgf1;
 
 fn generate_random_seed(h_len: usize) -> Vec<u8> {
