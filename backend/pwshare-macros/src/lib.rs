@@ -2,6 +2,7 @@ mod from_repr;
 mod into_repr;
 mod readable_from_stream;
 mod writable_to_sink;
+mod f128;
 
 use crate::from_repr::impl_from_repr;
 use crate::into_repr::impl_into_repr;
@@ -11,6 +12,7 @@ use proc_macro2::Span;
 use quote::quote;
 use readable_from_stream::impl_readable_from_stream_trait;
 use syn::{DeriveInput, Ident, LitInt};
+use crate::f128::F128;
 
 fn get_repr_type(ast: &DeriveInput) -> Option<Ident> {
     for attr in &ast.attrs {
@@ -126,9 +128,19 @@ pub fn generate_k_sha256(_: TokenStream) -> TokenStream {
 pub fn generate_k_sha512(_: TokenStream) -> TokenStream {
     let primes = generate_primes(80);
 
-    let fractionals = primes.map(|prime| {
-        let cbrt = ();
+    let fractional_parts = primes.map(|prime| {
+        let cbrt = F128::from(prime as f64).cbrt();
+
+        let frac = cbrt.set_integer_part_to_one().mantissa.without_leading_1();
+        let res = (frac >> (112 - 64)) as u64;
+
+        res
     });
 
-    quote! {}.into()
+    let literals = fractional_parts
+        .map(|frac| LitInt::new(format!("0x{:x}u64", frac).as_str(), Span::call_site()));
+
+    quote! {
+        [#(#literals),*]
+    }.into()
 }
