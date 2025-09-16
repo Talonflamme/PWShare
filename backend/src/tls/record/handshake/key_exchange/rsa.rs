@@ -2,7 +2,7 @@ use crate::tls::record::public_key_encrypted::PublicKeyEncrypted;
 use crate::util::UintDisplay;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Formatter};
-use crate::tls::connection_state::security_parameters::PRFAlgorithm;
+use crate::tls::connection_state::prf::PRFAlgorithm;
 use crate::tls::record::protocol_version::ProtocolVersion;
 
 #[derive(Debug, ReadableFromStream, WritableToSink)]
