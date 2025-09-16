@@ -6,10 +6,10 @@ pub trait HashFunction {
     // using Box<dyn H> otherwise. So they can neither be Const, nor methods of the Trait itself (using
     // Self).
     /// The output length of this Hash Function in bytes.
-    fn h_len(&self) -> u32;
+    fn h_len(&self) -> usize;
 
     /// The block size of the hash function in bytes.
-    fn block_size_bytes(&self) -> u32;
+    fn block_size_bytes(&self) -> usize;
 
     fn hash(&self, message: &[u8]) -> Vec<u8>;
 }
@@ -35,11 +35,11 @@ pub struct Md5;
 const K_MD5: [u32; 64] = generate_k_md5!();
 
 impl HashFunction for Md5 {
-    fn h_len(&self) -> u32 {
+    fn h_len(&self) -> usize {
         16
     }
 
-    fn block_size_bytes(&self) -> u32 {
+    fn block_size_bytes(&self) -> usize {
         64
     }
 
@@ -113,7 +113,7 @@ impl HashFunction for Md5 {
             d0 = d0.wrapping_add(d);
         }
 
-        let mut res = Vec::with_capacity(self.h_len() as usize);
+        let mut res = Vec::with_capacity(self.h_len());
 
         res.extend_from_slice(&a0.to_le_bytes());
         res.extend_from_slice(&b0.to_le_bytes());
@@ -127,11 +127,11 @@ impl HashFunction for Md5 {
 pub struct Sha1;
 
 impl HashFunction for Sha1 {
-    fn h_len(&self) -> u32 {
+    fn h_len(&self) -> usize {
         20
     }
 
-    fn block_size_bytes(&self) -> u32 {
+    fn block_size_bytes(&self) -> usize {
         64
     }
 
@@ -222,7 +222,7 @@ impl HashFunction for Sha1 {
             h4 = h4.wrapping_add(e);
         }
 
-        let mut result = Vec::with_capacity(self.h_len() as usize);
+        let mut result = Vec::with_capacity(self.h_len());
 
         result.extend_from_slice(&h0.to_be_bytes());
         result.extend_from_slice(&h1.to_be_bytes());
@@ -367,11 +367,11 @@ macro_rules! sha512 {
 pub struct Sha256;
 
 impl HashFunction for Sha256 {
-    fn h_len(&self) -> u32 {
+    fn h_len(&self) -> usize {
         32
     }
 
-    fn block_size_bytes(&self) -> u32 {
+    fn block_size_bytes(&self) -> usize {
         64
     }
 
@@ -402,7 +402,7 @@ impl HashFunction for Sha256 {
 
         sha256!(message, h0, h1, h2, h3, h4, h5, h6, h7);
 
-        let mut result = Vec::with_capacity(self.h_len() as usize);
+        let mut result = Vec::with_capacity(self.h_len());
 
         result.extend_from_slice(&h0.to_be_bytes());
         result.extend_from_slice(&h1.to_be_bytes());
@@ -420,11 +420,11 @@ impl HashFunction for Sha256 {
 pub struct Sha224;
 
 impl HashFunction for Sha224 {
-    fn h_len(&self) -> u32 {
+    fn h_len(&self) -> usize {
         28
     }
 
-    fn block_size_bytes(&self) -> u32 {
+    fn block_size_bytes(&self) -> usize {
         64
     }
 
@@ -453,7 +453,7 @@ impl HashFunction for Sha224 {
 
         sha256!(message, h0, h1, h2, h3, h4, h5, h6, h7);
 
-        let mut result = Vec::with_capacity(self.h_len() as usize);
+        let mut result = Vec::with_capacity(self.h_len());
 
         result.extend_from_slice(&h0.to_be_bytes());
         result.extend_from_slice(&h1.to_be_bytes());
@@ -471,11 +471,11 @@ impl HashFunction for Sha224 {
 pub struct Sha512;
 
 impl HashFunction for Sha512 {
-    fn h_len(&self) -> u32 {
+    fn h_len(&self) -> usize {
         64
     }
 
-    fn block_size_bytes(&self) -> u32 {
+    fn block_size_bytes(&self) -> usize {
         128
     }
 
@@ -505,7 +505,7 @@ impl HashFunction for Sha512 {
 
         sha512!(message, h0, h1, h2, h3, h4, h5, h6, h7);
 
-        let mut result = Vec::with_capacity(self.h_len() as usize);
+        let mut result = Vec::with_capacity(self.h_len());
 
         result.extend_from_slice(&h0.to_be_bytes());
         result.extend_from_slice(&h1.to_be_bytes());
@@ -523,11 +523,11 @@ impl HashFunction for Sha512 {
 pub struct Sha384;
 
 impl HashFunction for Sha384 {
-    fn h_len(&self) -> u32 {
+    fn h_len(&self) -> usize {
         48
     }
 
-    fn block_size_bytes(&self) -> u32 {
+    fn block_size_bytes(&self) -> usize {
         128
     }
 
@@ -557,7 +557,7 @@ impl HashFunction for Sha384 {
 
         sha512!(message, h0, h1, h2, h3, h4, h5, h6, h7);
 
-        let mut result = Vec::with_capacity(self.h_len() as usize);
+        let mut result = Vec::with_capacity(self.h_len());
 
         result.extend_from_slice(&h0.to_be_bytes());
         result.extend_from_slice(&h1.to_be_bytes());

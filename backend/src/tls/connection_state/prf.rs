@@ -76,11 +76,11 @@ impl Iterator for PHash {
 
         assert_eq!(
             self.a_value.as_ref().unwrap().len(),
-            self.hash.h_len() as usize + self.seed.len()
+            self.hash.h_len() + self.seed.len()
         );
 
         // remove seed again
-        self.a_value.as_mut().unwrap().truncate(self.hash.h_len() as usize);
+        self.a_value.as_mut().unwrap().truncate(self.hash.h_len());
 
         self.bytes_queue = hmac.into();
         self.bytes_queue.pop_front() // always Some

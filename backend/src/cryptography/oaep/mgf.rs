@@ -7,7 +7,7 @@ pub fn mgf1(
     seed: &[u8],
     length: usize,
 ) -> Vec<u8> {
-    let h_len = hash.h_len() as usize;
+    let h_len = hash.h_len();
 
     assert!((length >> 32) <= h_len, "mask too long");
 

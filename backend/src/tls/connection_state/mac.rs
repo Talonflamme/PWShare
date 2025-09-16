@@ -18,8 +18,8 @@ pub enum MACAlgorithm {
 /// * `k` - The secret key.
 /// * `m` - The message to be authenticated.
 pub fn hmac(hash: &dyn HashFunction, k: &[u8], m: &[u8]) -> Vec<u8> {
-    let block_size = hash.block_size_bytes() as usize;
-    let hash_size = hash.h_len() as usize;
+    let block_size = hash.block_size_bytes();
+    let hash_size = hash.h_len();
 
     if hash_size > block_size {
         panic!("K' cannot be generated.");
