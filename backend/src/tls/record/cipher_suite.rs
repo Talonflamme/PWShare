@@ -1,5 +1,7 @@
+use crate::tls::connection_state::mac::MACAlgorithm;
+use crate::tls::connection_state::prf::PRFAlgorithm;
 use crate::tls::connection_state::security_parameters::{
-    BulkCipherAlgorithm, CipherType, MACAlgorithm, PRFAlgorithm, SecurityParameters,
+    BulkCipherAlgorithm, CipherType, SecurityParameters,
 };
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use pwshare_macros::{FromRepr, IntoRepr};

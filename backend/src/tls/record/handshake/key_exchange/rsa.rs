@@ -2,6 +2,7 @@ use crate::tls::record::public_key_encrypted::PublicKeyEncrypted;
 use crate::util::UintDisplay;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Formatter};
+use crate::tls::connection_state::security_parameters::PRFAlgorithm;
 use crate::tls::record::protocol_version::ProtocolVersion;
 
 #[derive(Debug, ReadableFromStream, WritableToSink)]
@@ -13,6 +14,12 @@ pub struct EncryptedPreMasterSecret {
 pub struct PreMasterSecret {
     client_version: ProtocolVersion,
     random: [u8; 46]
+}
+
+impl PreMasterSecret {
+    pub fn convert_to_master(&self, prf: &PRFAlgorithm) {
+        // TODO
+    }
 }
 
 impl Debug for PreMasterSecret {

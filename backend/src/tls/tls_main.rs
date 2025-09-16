@@ -45,7 +45,7 @@ fn handle_client(mut stream: TcpStream) -> Result<()> {
     // TODO: check version and abort if less than TLS 1.2
 
     // respond
-    respond_to_client_hello(&mut stream, &client_hello)?;
+    let security_params = respond_to_client_hello(&mut stream, &client_hello)?;
 
     let header = RecordHeader::read_from_stream(&mut stream)?;
     let handshake = header.read_handshake_from_stream(&mut stream)?;
@@ -59,11 +59,16 @@ fn handle_client(mut stream: TcpStream) -> Result<()> {
         ));
     };
 
-    println!("{:?}", client_key_exchange);
-
     let pre_master = decode_pre_master_secret(client_key_exchange)?;
 
-    println!("{:?}", pre_master);
+    let master_secret = if let Some(prf_func) = security_params.prf_algorithm.as_ref() {
+        pre_master.convert_to_master(prf_func)
+    } else {
+        return Err(Error::new(
+            ErrorKind::Other,
+            "Handshake failed. No PRF negotiated",
+        ));
+    };
 
     Ok(())
 }
@@ -144,14 +149,17 @@ fn send_server_hello_done(stream: &mut TcpStream) -> Result<()> {
     Ok(())
 }
 
-fn respond_to_client_hello(stream: &mut TcpStream, client_hello: &ClientHello) -> Result<()> {
+fn respond_to_client_hello(
+    stream: &mut TcpStream,
+    client_hello: &ClientHello,
+) -> Result<SecurityParameters> {
     let mut params = SecurityParameters::new_empty(ConnectionEnd::Server);
 
     send_server_hello(stream, client_hello, &mut params)?;
     send_certificate(stream)?;
     send_server_hello_done(stream)?;
 
-    Ok(())
+    Ok(params)
 }
 
 fn send_fragment(

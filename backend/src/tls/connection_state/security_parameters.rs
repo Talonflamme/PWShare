@@ -1,14 +1,12 @@
+use super::mac::MACAlgorithm;
+use super::prf::PRFAlgorithm;
+use crate::cryptography::hashing::{HashFunction, Sha256};
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 
 #[derive(Debug)]
 pub enum ConnectionEnd {
     Server,
     Client,
-}
-
-#[derive(Debug)]
-pub enum PRFAlgorithm {
-    TlsPrfSha256,
 }
 
 #[derive(Debug)]
@@ -24,16 +22,6 @@ pub enum CipherType {
     Stream,
     Block,
     Aead,
-}
-
-#[derive(Debug)]
-pub enum MACAlgorithm {
-    Null,
-    HMacMd5,
-    HMacSha1,
-    HMacSha256,
-    HMacSha384,
-    HMacSha512,
 }
 
 #[repr(u8)]
