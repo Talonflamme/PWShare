@@ -21,14 +21,14 @@ pub trait AESKey: Clone {
 /// rcon<sub>i</sub> = [rc<sub>i</sub>, 0x00 0x00 0x00]
 /// AES-128 uses up to rcon<sub>10</sub>, AES-192 up to rcon<sub>8</sub> & AES-256 up to rcon<sub>7</sub>.
 /// This array stores rcon<sub>1</sub> through rcon<sub>10</sub>. Hence, index 0 is rcon<sub>1</sub>
-const rc: [u8; 10] = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36];
+const RC: [u8; 10] = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36];
 
 const fn get_rcon_i(i: usize) -> u32 {
     if i == 0 {
         panic!("rcon_0 does not exist. It exists from rcon_1 to rcon_10");
     }
 
-    (rc[i - 1] as u32) << 24
+    (RC[i - 1] as u32) << 24
 }
 
 fn sub_word(word: u32) -> u32 {

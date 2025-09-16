@@ -17,7 +17,6 @@ use crate::tls::record::{
 };
 use crate::tls::WritableToSink;
 use crate::util::UintDisplay;
-use num_bigint::BigUint;
 use std::fs;
 use std::io::{Error, ErrorKind, Result, Write};
 use std::net::{TcpListener, TcpStream};

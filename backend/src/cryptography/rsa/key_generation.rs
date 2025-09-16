@@ -1,4 +1,4 @@
-use super::{rabin_miller::MillerRabinTest, PrivateKey, PublicKey, Sieve};
+use super::{rabin_miller::MillerRabinTest, PrivateKey, Sieve};
 use crate::cryptography::rng::rng;
 use num_bigint::{BigUint, RandBigInt};
 use num_integer::Integer;

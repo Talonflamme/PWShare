@@ -1,6 +1,5 @@
 use super::mac::MACAlgorithm;
 use super::prf::PRFAlgorithm;
-use crate::cryptography::hashing::{HashFunction, Sha256};
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 
 #[derive(Debug)]

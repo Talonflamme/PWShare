@@ -1,5 +1,4 @@
 use crate::cryptography::rsa::PublicKey;
-use crate::tls::Sink;
 use num_bigint::BigUint;
 use std::fmt::{Debug, Display};
 

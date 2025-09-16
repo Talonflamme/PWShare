@@ -8,7 +8,7 @@ pub enum PRFAlgorithm {
 }
 
 /// Struct for implementing the `P_hash` function.
-struct PHash {
+pub struct PHash {
     hash: Box<dyn HashFunction>,
     secret: Vec<u8>,
     seed: Vec<u8>,

@@ -1,5 +1,3 @@
-use once_cell::sync::Lazy;
-
 const fn gen_sbox() -> [u8; 256] {
     let mut sbox = [0; 256];
 

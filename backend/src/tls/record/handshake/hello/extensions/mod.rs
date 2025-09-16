@@ -1,5 +1,4 @@
 pub use extension::*;
-pub use signature_algorithms::SignatureAlgorithmsExtension;
 pub use renegotiation_info::RenegotiationInfoExtension;
 
 mod extension;

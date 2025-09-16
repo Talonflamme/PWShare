@@ -74,7 +74,7 @@ pub(super) fn mix_column(column: &mut [u8; 4]) {
 
     for i in 0..4 {
         a[i] = column[i];
-        b[i] = galois_mul::mul2[a[i] as usize];
+        b[i] = galois_mul::MUL2[a[i] as usize];
     }
 
     column[0] = b[0] ^ a[3] ^ a[2] ^ b[1] ^ a[1]; // 2 * a0 + a3 + a2 + 3 * a1
@@ -87,28 +87,28 @@ pub(super) fn inv_mix_column(column: &mut [u8; 4]) {
     let mut buffer: [u8; 4] = [0; 4];
 
     // b0 = 14*d0 + 11*d1 + 13*d2 + 9*d3
-    buffer[0] = galois_mul::mul14[column[0] as usize]
-        ^ galois_mul::mul11[column[1] as usize]
-        ^ galois_mul::mul13[column[2] as usize]
-        ^ galois_mul::mul9[column[3] as usize];
+    buffer[0] = galois_mul::MUL14[column[0] as usize]
+        ^ galois_mul::MUL11[column[1] as usize]
+        ^ galois_mul::MUL13[column[2] as usize]
+        ^ galois_mul::MUL9[column[3] as usize];
 
     // b1 = 9*d0 + 14*d1 + 11*d2 + 13*d3
-    buffer[1] = galois_mul::mul9[column[0] as usize]
-        ^ galois_mul::mul14[column[1] as usize]
-        ^ galois_mul::mul11[column[2] as usize]
-        ^ galois_mul::mul13[column[3] as usize];
+    buffer[1] = galois_mul::MUL9[column[0] as usize]
+        ^ galois_mul::MUL14[column[1] as usize]
+        ^ galois_mul::MUL11[column[2] as usize]
+        ^ galois_mul::MUL13[column[3] as usize];
 
     // b2 = 13*d0 + 9*d1 + 14*d2 + 11*d3
-    buffer[2] = galois_mul::mul13[column[0] as usize]
-        ^ galois_mul::mul9[column[1] as usize]
-        ^ galois_mul::mul14[column[2] as usize]
-        ^ galois_mul::mul11[column[3] as usize];
+    buffer[2] = galois_mul::MUL13[column[0] as usize]
+        ^ galois_mul::MUL9[column[1] as usize]
+        ^ galois_mul::MUL14[column[2] as usize]
+        ^ galois_mul::MUL11[column[3] as usize];
 
     // b3 = 11*d0 + 13*d1 + 9*d2 + 14*d3
-    buffer[3] = galois_mul::mul11[column[0] as usize]
-        ^ galois_mul::mul13[column[1] as usize]
-        ^ galois_mul::mul9[column[2] as usize]
-        ^ galois_mul::mul14[column[3] as usize];
+    buffer[3] = galois_mul::MUL11[column[0] as usize]
+        ^ galois_mul::MUL13[column[1] as usize]
+        ^ galois_mul::MUL9[column[2] as usize]
+        ^ galois_mul::MUL14[column[3] as usize];
 
     *column = buffer;
 }
