@@ -61,13 +61,15 @@ fn handle_client(mut stream: TcpStream) -> Result<()> {
     let pre_master = decode_pre_master_secret(client_key_exchange)?;
 
     let master_secret = if let Some(prf_func) = security_params.prf_algorithm.as_ref() {
-        pre_master.convert_to_master(prf_func)
+        pre_master.convert_to_master(prf_func, &security_params)
     } else {
         return Err(Error::new(
             ErrorKind::Other,
             "Handshake failed. No PRF negotiated",
         ));
     };
+    
+    println!("{}", (&master_secret[..]).hex());
 
     Ok(())
 }
