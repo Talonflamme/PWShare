@@ -6,20 +6,18 @@ use crate::tls::connection_state::security_parameters::{
     CompressionMethod, ConnectionEnd, SecurityParameters,
 };
 use crate::tls::record::certificate::{ASN1Cert, Certificate};
+use crate::tls::record::fragmentation::tls_plaintext::{ContentTypeWithContent, TLSPlaintext};
 use crate::tls::record::hello::extensions::{Extension, ExtensionType, RenegotiationInfoExtension};
 use crate::tls::record::hello::ServerHelloDone;
 use crate::tls::record::hello::{extensions, ClientHello, ServerHello, SessionID};
 use crate::tls::record::key_exchange::rsa::PreMasterSecret;
 use crate::tls::record::protocol_version::ProtocolVersion;
-use crate::tls::record::{
-    cipher_suite, ClientKeyExchange, ContentType, Handshake, HandshakeType, Random, RecordFragment,
-    RecordHeader,
-};
+use crate::tls::record::{cipher_suite, ClientKeyExchange, Handshake, HandshakeType, Random};
 use crate::tls::WritableToSink;
+use crate::util::UintDisplay;
 use std::fs;
 use std::io::{Error, ErrorKind, Result, Write};
 use std::net::TcpStream;
-use crate::util::UintDisplay;
 
 struct ConnectionStates {
     current_read: ConnectionState,
@@ -36,7 +34,7 @@ pub struct Connection {
     /// The stream from which to read bytes and to which to write bytes to.
     stream: TcpStream,
     /// The current/pending read/write states
-    connection_states: ConnectionStates
+    connection_states: ConnectionStates,
 }
 
 impl Connection {
@@ -49,20 +47,16 @@ impl Connection {
 
         Connection {
             stream,
-            connection_states: states
+            connection_states: states,
         }
     }
 
-    fn read_header(&mut self) -> Result<RecordHeader> {
-        RecordHeader::read_from_stream(&mut self.stream)
-    }
-
     fn read_handshake(&mut self) -> Result<Handshake> {
-        let header = self.read_header()?;
+        let plaintext = TLSPlaintext::read_from_stream(&mut self.stream)?;
+
+        let handshake = plaintext.get_handshake()?;
 
         // TODO: or ChangeCipherSpec
-        let handshake = header.read_handshake_from_stream(&mut self.stream)?;
-
         Ok(handshake)
     }
 
@@ -121,7 +115,8 @@ impl Connection {
             Some(server_hello.random.to_bytes());
 
         let handshake = Handshake::new(HandshakeType::ServerHello(server_hello));
-        self.send_fragment(&handshake, ContentType::Handshake)?;
+        self.send_fragment(ContentTypeWithContent::Handshake(handshake))?;
+
         Ok(())
     }
 
@@ -133,7 +128,7 @@ impl Connection {
         };
 
         let handshake = Handshake::new(HandshakeType::Certificate(certificate));
-        self.send_fragment(&handshake, ContentType::Handshake)?;
+        self.send_fragment(ContentTypeWithContent::Handshake(handshake))?;
 
         Ok(())
     }
@@ -142,7 +137,7 @@ impl Connection {
         let server_hello_done = ServerHelloDone {};
 
         let handshake = Handshake::new(HandshakeType::ServerHelloDone(server_hello_done));
-        self.send_fragment(&handshake, ContentType::Handshake)?;
+        self.send_fragment(ContentTypeWithContent::Handshake(handshake))?;
 
         Ok(())
     }
@@ -156,30 +151,11 @@ impl Connection {
         Ok(())
     }
 
-    fn send_fragment(
-        &mut self,
-        record_fragment: &impl RecordFragment,
-        content_type: ContentType,
-    ) -> Result<()> {
-        let mut fragment_bytes = record_fragment.to_data()?;
+    fn send_fragment(&mut self, content: ContentTypeWithContent) -> Result<()> {
+        let tls_plaintext = TLSPlaintext::new(content, ProtocolVersion::tls1_2())?;
 
-        if fragment_bytes.len() > (1 << 14) {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                format!("Length: {} must not exceed 2^14", fragment_bytes.len()),
-            ));
-        }
-
-        let header = RecordHeader {
-            content_type,
-            version: ProtocolVersion::tls1_2(),
-            length: fragment_bytes.len() as u16,
-        };
-
-        let mut bytes: Vec<u8> = Vec::with_capacity(size_of::<RecordHeader>());
-        header.write(&mut bytes)?;
-
-        bytes.append(&mut fragment_bytes);
+        let mut bytes: Vec<u8> = Vec::new();
+        tls_plaintext.write(&mut bytes)?;
 
         self.stream.write_all(bytes.as_slice())?;
 
@@ -210,11 +186,23 @@ impl Connection {
             })
     }
 
-    fn convert_pre_master_to_master(&mut self, pre_master_secret: PreMasterSecret) -> Result<[u8; 48]> {
-        if let Some(prf_func) = self.connection_states.pending_parameters.prf_algorithm.as_ref() {
-            Ok(pre_master_secret.convert_to_master(prf_func, &self.connection_states.pending_parameters))
+    fn convert_pre_master_to_master(
+        &mut self,
+        pre_master_secret: PreMasterSecret,
+    ) -> Result<[u8; 48]> {
+        if let Some(prf_func) = self
+            .connection_states
+            .pending_parameters
+            .prf_algorithm
+            .as_ref()
+        {
+            Ok(pre_master_secret
+                .convert_to_master(prf_func, &self.connection_states.pending_parameters))
         } else {
-            Err(Error::new(ErrorKind::Other, "Handshake failed. No PRF negotiated"))
+            Err(Error::new(
+                ErrorKind::Other,
+                "Handshake failed. No PRF negotiated",
+            ))
         }
     }
 

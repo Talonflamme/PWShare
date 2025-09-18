@@ -143,3 +143,16 @@ impl<T, const MAX: usize> VariableLengthVec<T, 0, MAX> {
         VariableLengthVec(Vec::new())
     }
 }
+
+impl<const MIN: usize, const MAX: usize> VariableLengthVec<u8, MIN, MAX> {
+    pub fn check_bounds(&self) -> std::io::Result<()> {
+        if self.len() < MIN || self.len() > MAX {
+            Err(Error::new(
+                ErrorKind::InvalidData,
+                format!("Length: {} out of bounds ({}..{})", self.len(), MIN, MAX),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}

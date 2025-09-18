@@ -5,7 +5,6 @@ use super::{
 };
 use crate::tls::record::certificate::Certificate;
 use crate::tls::record::writable_to_sink::{Sink, WritableToSink};
-use crate::tls::record::{ContentType, RecordFragment};
 use crate::tls::ReadableFromStream;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::Debug;
@@ -127,15 +126,5 @@ impl WritableToSink for Handshake {
         buffer.extend(body_buffer.into_iter());
 
         Ok(())
-    }
-}
-
-impl RecordFragment for Handshake {
-    const CONTENT_TYPE: ContentType = ContentType::Handshake;
-
-    fn to_data(&self) -> Result<Vec<u8>> {
-        let mut buf = Vec::new();
-        self.write(&mut buf)?;
-        Ok(buf)
     }
 }
