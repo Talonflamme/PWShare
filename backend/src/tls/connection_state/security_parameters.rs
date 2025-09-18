@@ -1,14 +1,15 @@
 use super::mac::MACAlgorithm;
 use super::prf::PRFAlgorithm;
+use crate::tls::record::cipher_suite::CipherSuite;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum ConnectionEnd {
     Server,
     Client,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum BulkCipherAlgorithm {
     Null,
     Rc4,
@@ -16,7 +17,7 @@ pub enum BulkCipherAlgorithm {
     Aes,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum CipherType {
     Stream,
     Block,
@@ -29,9 +30,9 @@ pub enum CompressionMethod {
     Null = 0,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct SecurityParameters {
-    pub entity: ConnectionEnd,
+    pub entity: Option<ConnectionEnd>,
     pub prf_algorithm: Option<PRFAlgorithm>,
     pub bulk_cipher_algorithm: Option<BulkCipherAlgorithm>,
     pub cipher_type: Option<CipherType>,
@@ -52,9 +53,15 @@ pub struct SecurityParameters {
 }
 
 impl SecurityParameters {
-    pub fn new_empty(entity: ConnectionEnd) -> Self {
+    pub fn new(entity: ConnectionEnd) -> Self {
+        let mut p = Self::new_empty();
+        p.entity = Some(entity);
+        p
+    }
+
+    pub fn new_empty() -> Self {
         SecurityParameters {
-            entity,
+            entity: None,
             prf_algorithm: None,
             bulk_cipher_algorithm: None,
             cipher_type: None,
@@ -70,5 +77,11 @@ impl SecurityParameters {
             client_random: None,
             server_random: None,
         }
+    }
+
+    pub fn new_no_encryption(entity: ConnectionEnd) -> Self {
+        let mut params = Self::new(entity);
+        CipherSuite::TlsNullWithNullNull.set_security_params(&mut params);
+        params
     }
 }

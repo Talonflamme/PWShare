@@ -193,8 +193,16 @@ macro_rules! define_suite {
 impl CipherSuite {
     pub fn set_security_params(&self, params: &mut SecurityParameters) {
         match self {
-            CipherSuite::TlsNullWithNullNull => panic!("tls_null_with_null must not be used"),
             CipherSuite::Unknown => panic!("Cannot set security params on Unknown"),
+
+            CipherSuite::TlsNullWithNullNull => {
+                define_suite!(
+                    params,
+                    prf = PRFAlgorithm::TlsPrfSha256,
+                    cipher = Null,
+                    mac = Null
+                );
+            },
 
             CipherSuite::TlsRsaWithNullMd5 => {
                 define_suite!(

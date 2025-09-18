@@ -2,7 +2,7 @@ use crate::cryptography::hashing::{HashFunction, Sha256};
 use crate::tls::connection_state::mac::hmac;
 use std::collections::VecDeque;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum PRFAlgorithm {
     TlsPrfSha256,
 }

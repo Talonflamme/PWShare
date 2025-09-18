@@ -1,6 +1,6 @@
 use crate::cryptography::hashing::{self, HashFunction};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum MACAlgorithm {
     Null,
     HMacMd5,
