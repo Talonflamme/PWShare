@@ -20,6 +20,7 @@ use crate::tls::WritableToSink;
 use std::fs;
 use std::io::{Error, ErrorKind, Result, Write};
 use std::net::TcpStream;
+use crate::util::UintDisplay;
 
 pub(crate) struct ConnectionStates {
     pub(crate) current_read: ConnectionState,
@@ -157,9 +158,11 @@ impl Connection {
 
     fn send_fragment(&mut self, content: ContentTypeWithContent) -> Result<()> {
         let tls_plaintext = TLSPlaintext::new(content, ProtocolVersion::tls1_2())?;
+        let tls_compressed = tls_plaintext.compress(&self.connection_states.current_write)?;
+        let tls_ciphertext = tls_compressed.encrypt(&self.connection_states.current_write)?;
 
         let mut bytes: Vec<u8> = Vec::new();
-        tls_plaintext.write(&mut bytes)?;
+        tls_ciphertext.write(&mut bytes)?;
 
         self.stream.write_all(bytes.as_slice())?;
 
@@ -221,6 +224,8 @@ impl Connection {
         let pre_master = self.decode_pre_master_secret(client_key_exchange)?;
         let master = self.convert_pre_master_to_master(pre_master)?;
 
+        // println!("{}", (&master[..]).hex());
+        
         self.connection_states.pending_parameters.master_secret = Some(master);
 
         Ok(())

@@ -35,7 +35,6 @@ impl Into<ContentType> for &ContentTypeWithContent {
     }
 }
 
-#[derive(ReadableFromStream, WritableToSink)]
 pub struct TLSPlaintext {
     pub(crate) content_type: ContentType,
     pub(crate) version: ProtocolVersion,
@@ -64,10 +63,8 @@ impl TLSPlaintext {
         let mut bytes: Vec<u8> = Vec::new();
 
         match content {
-            ContentTypeWithContent::ChangeCipherSpec() => {}
-            ContentTypeWithContent::Alert() => {}
             ContentTypeWithContent::Handshake(h) => h.write(&mut bytes)?,
-            ContentTypeWithContent::ApplicationData() => {}
+            _ => todo!()
         };
 
         let fragment: VariableLengthVec<u8, 0, 16384> = bytes.into();

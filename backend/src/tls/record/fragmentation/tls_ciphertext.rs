@@ -1,12 +1,12 @@
 use crate::tls::connection::Connection;
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::connection_state::security_parameters;
+use crate::tls::record::cryptographic_attributes::StreamCiphered;
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::fragmentation::tls_plaintext::ContentType;
 use crate::tls::record::protocol_version::ProtocolVersion;
-use crate::tls::ReadableFromStream;
+use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use std::io::{Error, ErrorKind, Read, Result};
-use crate::tls::record::cryptographic_attributes::StreamCiphered;
 
 pub(crate) struct GenericStreamCipher {
     pub content: Vec<u8>,
@@ -44,6 +44,12 @@ impl GenericBlockCipher {
     }
 }
 
+impl WritableToSink for GenericBlockCipher {
+    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+        todo!()
+    }
+}
+
 pub(crate) struct GenericAEADCipher {}
 
 impl GenericAEADCipher {
@@ -52,10 +58,30 @@ impl GenericAEADCipher {
     }
 }
 
+impl WritableToSink for GenericAEADCipher {
+    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+        todo!()
+    }
+}
+
 pub(crate) enum CipherType {
     Stream(StreamCiphered<GenericStreamCipher>),
     Block(GenericBlockCipher),
     Aead(GenericAEADCipher),
+}
+
+impl WritableToSink for CipherType {
+    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+        // here, we do not include a discriminant before, since
+        // the variant depends on SecurityParameters.cipher_type
+        match self {
+            CipherType::Stream(gsc) => buffer.extend_from_slice(&gsc.bytes),
+            CipherType::Block(gbc) => gbc.write(buffer)?,
+            CipherType::Aead(gac) => gac.write(buffer)?,
+        }
+
+        Ok(())
+    }
 }
 
 pub struct TLSCiphertext {
@@ -67,7 +93,7 @@ pub struct TLSCiphertext {
 /// Encrypts the given `TLSCompressed` to a `TLSCiphertext` using the cipher
 /// specified in `con_state`. Also computes the `MAC` - if specified.
 pub fn encrypt(compressed: TLSCompressed, con_state: &ConnectionState) -> Result<TLSCiphertext> {
-    todo!()
+    con_state.cipher.encrypt(compressed, con_state)
 }
 
 impl TLSCiphertext {
@@ -86,7 +112,7 @@ impl TLSCiphertext {
         if length > 18432 {
             return Err(Error::new(
                 ErrorKind::Other,
-                format!("Length out of bounds: {}", length),
+                format!("TLSCiphertext must not exceed 2^14 + 2048: {}", length),
             ));
         }
 
@@ -115,6 +141,32 @@ impl TLSCiphertext {
             version,
             fragment,
         })
+    }
+
+    pub fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+        self.content_type.write(buffer)?; // .type
+        self.version.write(buffer)?; // .version
+
+        let mut frag_buffer: Vec<u8> = Vec::new();
+        self.fragment.write(&mut frag_buffer)?;
+
+        let length = frag_buffer.len();
+
+        if length > 18432 {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                format!(
+                    "TLSCiphertext Length must not exceed 2^14 + 2048: {}",
+                    length
+                ),
+            ));
+        }
+
+        let length = length as u16;
+        length.write(buffer)?; // .length
+        buffer.append(frag_buffer); // .fragment
+
+        Ok(())
     }
 
     pub fn decrypt(self, con_state: &ConnectionState) -> Result<TLSCompressed> {
