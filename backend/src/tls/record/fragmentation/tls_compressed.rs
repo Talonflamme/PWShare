@@ -4,6 +4,7 @@ use crate::tls::record::fragmentation::tls_plaintext::{ContentType, TLSPlaintext
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use std::io::{Error, ErrorKind, Result};
+use crate::tls::WritableToSink;
 
 pub struct TLSCompressed {
     pub(crate) content_type: ContentType,
@@ -34,5 +35,29 @@ impl TLSCompressed {
     /// Encrypts this `TLSCompressed` into a `TLSCiphertext`.
     pub fn encrypt(self, con_state: &ConnectionState) -> Result<TLSCiphertext> {
         tls_ciphertext::encrypt(self, con_state)
+    }
+
+    pub fn generate_mac(&self, con_state: &ConnectionState) -> Result<Vec<u8>> {
+        // length of seq_number (u64, 8 bytes) + .type (ContentType, 1 byte) +
+        //  .version (ProtocolVersion, 2 bytes) + .length (u16, 2 bytes) = 13 bytes
+        const MESSAGE_SIZE: usize = 13;
+
+        // TODO: use iter here
+        let mut message = Vec::with_capacity(MESSAGE_SIZE + self.fragment.len());
+        
+        message.extend_from_slice(&con_state.sequence_number.to_be_bytes()); // seq_number
+        self.content_type.write(&mut message)?; // .type
+        self.version.write(&mut message)?; // .version
+        (self.fragment.len() as u16).write(&mut message)?; // .length
+        message.extend_from_slice(self.fragment.as_slice()); // .fragment
+
+        let mac: Vec<u8> = con_state.parameters.mac_algorithm.ok_or(
+            Error::new(ErrorKind::Other, "MAC must be set by now")
+        )?.hmac(
+            con_state.get_client_write_key()?.as_slice(),
+            message.as_slice()
+        );
+
+        Ok(mac)
     }
 }

@@ -8,3 +8,4 @@ pub mod cipher_suite;
 pub(super) mod writable_to_sink;
 mod public_key_encrypted;
 pub mod fragmentation;
+pub mod cipher;

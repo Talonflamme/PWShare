@@ -15,17 +15,17 @@ use crate::tls::record::key_exchange::rsa::PreMasterSecret;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::{cipher_suite, ClientKeyExchange, Handshake, HandshakeType, Random};
 use crate::tls::WritableToSink;
-use crate::util::UintDisplay;
 use std::fs;
 use std::io::{Error, ErrorKind, Result, Write};
 use std::net::TcpStream;
+use crate::tls::record::fragmentation::tls_ciphertext::TLSCiphertext;
 
-struct ConnectionStates {
-    current_read: ConnectionState,
-    current_write: ConnectionState,
+pub(crate) struct ConnectionStates {
+    pub(crate) current_read: ConnectionState,
+    pub(crate) current_write: ConnectionState,
     /// The security parameters of the pending write/read states. The `entity` field must
     /// be newly assigned when the pending states become the current states.
-    pending_parameters: SecurityParameters,
+    pub(crate) pending_parameters: SecurityParameters,
 }
 
 /// The `Connection` struct holds information about a single connection to a single
@@ -33,9 +33,9 @@ struct ConnectionStates {
 /// sending & encrypting, receiving & decrypting messages to & from the client.
 pub struct Connection {
     /// The stream from which to read bytes and to which to write bytes to.
-    stream: TcpStream,
+    pub(crate) stream: TcpStream,
     /// The current/pending read/write states
-    connection_states: ConnectionStates,
+    pub(crate) connection_states: ConnectionStates,
 }
 
 impl Connection {
@@ -53,8 +53,10 @@ impl Connection {
     }
 
     fn read_handshake(&mut self) -> Result<Handshake> {
-        let plaintext = TLSPlaintext::read_from_stream(&mut self.stream)?;
-
+        let ciphertext = TLSCiphertext::read_from_connection(self)?;
+        let compressed = ciphertext.decrypt(&mut self.connection_states.current_read)?;
+        let plaintext = compressed.decompress(&self.connection_states.current_read)?;
+        
         let handshake = plaintext.get_handshake()?;
 
         // TODO: or ChangeCipherSpec
@@ -218,7 +220,7 @@ impl Connection {
         let pre_master = self.decode_pre_master_secret(client_key_exchange)?;
         let master = self.convert_pre_master_to_master(pre_master)?;
 
-        println!("{}", (&master[..]).hex());
+        self.connection_states.pending_parameters.master_secret = Some(master);
 
         Ok(())
     }

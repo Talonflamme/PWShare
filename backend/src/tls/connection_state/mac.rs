@@ -10,6 +10,7 @@ pub enum MACAlgorithm {
     HMacSha512,
 }
 
+// TODO: change m to be iterable, don't require a slice
 /// Applies the HMAC-X algorithm, with x being the hash function of `self`. The return value
 /// will always have the output length of the hashing algorithm as a length, since the
 /// last step in `HMAC-X` is calling the Hash function.

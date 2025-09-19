@@ -3,7 +3,7 @@ use super::prf::PRFAlgorithm;
 use crate::tls::record::cipher_suite::CipherSuite;
 use crate::tls::connection_state::compression_method::CompressionMethod;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ConnectionEnd {
     Server,
     Client,

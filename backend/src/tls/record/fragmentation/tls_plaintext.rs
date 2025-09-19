@@ -6,8 +6,7 @@ use crate::tls::record::Handshake;
 use crate::tls::{ReadableFromStream, WritableToSink};
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Formatter};
-use std::io::{Error, ErrorKind, Read, Result};
-use std::net::TcpStream;
+use std::io::{Error, ErrorKind, Result};
 
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq, ReadableFromStream, WritableToSink)]
@@ -59,30 +58,6 @@ impl Debug for TLSPlaintext {
 }
 
 impl TLSPlaintext {
-    pub fn read_from_stream(stream: &mut TcpStream) -> Result<Self> {
-        // Header contains 5 bytes
-        let mut header_buf = [0u8; 5];
-        stream.read_exact(&mut header_buf)?;
-
-        // last two of those bytes are length as u16 (big-endian)
-        let length = (((header_buf[3] as u16) << 8) | header_buf[4] as u16) as usize;
-
-        if length > 16384 {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!("Length out of bounds: {}", length),
-            ));
-        }
-
-        let mut buf = vec![0; length];
-
-        stream.read_exact(buf.as_mut_slice())?;
-
-        let mut iter = header_buf.into_iter().chain(buf.into_iter());
-
-        Self::read(&mut iter)
-    }
-
     pub fn new(content: ContentTypeWithContent, version: ProtocolVersion) -> Result<Self> {
         let content_type = (&content).into();
 
