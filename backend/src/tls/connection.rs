@@ -7,6 +7,7 @@ use crate::tls::connection_state::security_parameters::{
     ConnectionEnd, SecurityParameters,
 };
 use crate::tls::record::certificate::{ASN1Cert, Certificate};
+use crate::tls::record::ciphers::cipher_suite;
 use crate::tls::record::fragmentation::tls_ciphertext::TLSCiphertext;
 use crate::tls::record::fragmentation::tls_plaintext::{ContentTypeWithContent, TLSPlaintext};
 use crate::tls::record::hello::extensions::{Extension, ExtensionType, RenegotiationInfoExtension};
@@ -14,7 +15,7 @@ use crate::tls::record::hello::ServerHelloDone;
 use crate::tls::record::hello::{extensions, ClientHello, ServerHello, SessionID};
 use crate::tls::record::key_exchange::rsa::PreMasterSecret;
 use crate::tls::record::protocol_version::ProtocolVersion;
-use crate::tls::record::{cipher_suite, ClientKeyExchange, Handshake, HandshakeType, Random};
+use crate::tls::record::{ClientKeyExchange, Handshake, HandshakeType, Random};
 use crate::tls::WritableToSink;
 use std::fs;
 use std::io::{Error, ErrorKind, Result, Write};

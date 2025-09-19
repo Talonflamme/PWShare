@@ -1,5 +1,5 @@
 use crate::tls::connection_state::security_parameters::{ConnectionEnd, SecurityParameters};
-use crate::tls::record::cipher::{self, TLSCipher};
+use crate::tls::record::ciphers::cipher::{self, TLSCipher};
 use std::io::{Error, ErrorKind, Result};
 
 #[derive(Debug)]
