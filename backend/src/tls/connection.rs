@@ -1,9 +1,10 @@
 use crate::cryptography::pem::FromPemContent;
 use crate::cryptography::pkcs1_v1_5;
 use crate::cryptography::rsa::PrivateKey;
+use crate::tls::connection_state::compression_method::CompressionMethod;
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::connection_state::security_parameters::{
-    CompressionMethod, ConnectionEnd, SecurityParameters,
+    ConnectionEnd, SecurityParameters,
 };
 use crate::tls::record::certificate::{ASN1Cert, Certificate};
 use crate::tls::record::fragmentation::tls_plaintext::{ContentTypeWithContent, TLSPlaintext};

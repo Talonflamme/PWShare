@@ -1,7 +1,7 @@
 use super::mac::MACAlgorithm;
 use super::prf::PRFAlgorithm;
 use crate::tls::record::cipher_suite::CipherSuite;
-use pwshare_macros::{ReadableFromStream, WritableToSink};
+use crate::tls::connection_state::compression_method::CompressionMethod;
 
 #[derive(Debug, Clone, Copy)]
 pub enum ConnectionEnd {
@@ -22,12 +22,6 @@ pub enum CipherType {
     Stream,
     Block,
     Aead,
-}
-
-#[repr(u8)]
-#[derive(PartialEq, Eq, Debug, ReadableFromStream, WritableToSink, Copy, Clone)]
-pub enum CompressionMethod {
-    Null = 0,
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -1,3 +1,5 @@
+use crate::tls::connection_state::connection_state::ConnectionState;
+use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use crate::tls::record::Handshake;
@@ -36,12 +38,12 @@ impl Into<ContentType> for &ContentTypeWithContent {
 
 #[derive(ReadableFromStream, WritableToSink)]
 pub struct TLSPlaintext {
-    content_type: ContentType,
-    version: ProtocolVersion,
+    pub(crate) content_type: ContentType,
+    pub(crate) version: ProtocolVersion,
     // normally, here is a `length: u16` field, but that length is the length
     // for `fragment` and we simply use a VariableLengthVec as parsing is made
     // easier and the stored bytes are the same
-    fragment: VariableLengthVec<u8, 0, 16384>, // 2^14
+    pub(crate) fragment: VariableLengthVec<u8, 0, 16384>, // 2^14
 }
 
 impl Debug for TLSPlaintext {
@@ -66,10 +68,13 @@ impl TLSPlaintext {
         let length = (((header_buf[3] as u16) << 8) | header_buf[4] as u16) as usize;
 
         if length > 16384 {
-            return Err(Error::new(ErrorKind::Other, format!("Length out of bounds: {}", length)));
+            return Err(Error::new(
+                ErrorKind::Other,
+                format!("Length out of bounds: {}", length),
+            ));
         }
 
-        let mut buf= vec![0; length];
+        let mut buf = vec![0; length];
 
         stream.read_exact(buf.as_mut_slice())?;
 
@@ -107,8 +112,10 @@ impl TLSPlaintext {
         Ok(match self.content_type {
             ContentType::ChangeCipherSpec => ContentTypeWithContent::ChangeCipherSpec(),
             ContentType::Alert => ContentTypeWithContent::Alert(),
-            ContentType::Handshake => ContentTypeWithContent::Handshake(Handshake::read(&mut iter)?),
-            ContentType::ApplicationData => ContentTypeWithContent::ApplicationData()
+            ContentType::Handshake => {
+                ContentTypeWithContent::Handshake(Handshake::read(&mut iter)?)
+            }
+            ContentType::ApplicationData => ContentTypeWithContent::ApplicationData(),
         })
     }
 
@@ -129,5 +136,24 @@ impl TLSPlaintext {
         let mut iter = frag.into_iter();
 
         Handshake::read(&mut iter)
+    }
+
+    /// Compresses the Plaintext into a `TLSCompressed` given the connection state.
+    /// This function does the opposite of `TLSCompressed.decompress()`.
+    pub fn compress(self, con_state: &ConnectionState) -> Result<TLSCompressed> {
+        let compression = con_state
+            .parameters
+            .compression_algorithm
+            .as_ref()
+            .ok_or(Error::new(
+                ErrorKind::Other,
+                "No compression algorithm negotiated",
+            ))?;
+
+        Ok(TLSCompressed {
+            content_type: self.content_type,
+            version: self.version,
+            fragment: compression.compress(self.fragment)?,
+        })
     }
 }
