@@ -1,6 +1,6 @@
 use crate::tls::connection_state::prf::PRFAlgorithm;
 use crate::tls::connection_state::security_parameters::SecurityParameters;
-use crate::tls::record::cryptographic_attributes::public_key_encrypted::PublicKeyEncrypted;
+use crate::tls::record::cryptographic_attributes::PublicKeyEncrypted;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::util::UintDisplay;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
