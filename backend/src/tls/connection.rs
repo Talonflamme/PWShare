@@ -7,6 +7,7 @@ use crate::tls::connection_state::security_parameters::{
     ConnectionEnd, SecurityParameters,
 };
 use crate::tls::record::certificate::{ASN1Cert, Certificate};
+use crate::tls::record::fragmentation::tls_ciphertext::TLSCiphertext;
 use crate::tls::record::fragmentation::tls_plaintext::{ContentTypeWithContent, TLSPlaintext};
 use crate::tls::record::hello::extensions::{Extension, ExtensionType, RenegotiationInfoExtension};
 use crate::tls::record::hello::ServerHelloDone;
@@ -18,7 +19,6 @@ use crate::tls::WritableToSink;
 use std::fs;
 use std::io::{Error, ErrorKind, Result, Write};
 use std::net::TcpStream;
-use crate::tls::record::fragmentation::tls_ciphertext::TLSCiphertext;
 
 pub(crate) struct ConnectionStates {
     pub(crate) current_read: ConnectionState,
@@ -54,9 +54,9 @@ impl Connection {
 
     fn read_handshake(&mut self) -> Result<Handshake> {
         let ciphertext = TLSCiphertext::read_from_connection(self)?;
-        let compressed = ciphertext.decrypt(&mut self.connection_states.current_read)?;
+        let compressed = ciphertext.decrypt(&self.connection_states.current_read)?;
         let plaintext = compressed.decompress(&self.connection_states.current_read)?;
-        
+
         let handshake = plaintext.get_handshake()?;
 
         // TODO: or ChangeCipherSpec

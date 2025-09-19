@@ -2,6 +2,7 @@ use crate::tls::connection_state::security_parameters::{ConnectionEnd, SecurityP
 use crate::tls::record::cipher::{self, TLSCipher};
 use std::io::{Error, ErrorKind, Result};
 
+#[derive(Debug)]
 pub struct ConnectionState {
     pub parameters: SecurityParameters,
     // compression state
@@ -11,7 +12,7 @@ pub struct ConnectionState {
     /// after each record is sent. The first record sent under this connection must
     /// use sequence number 0.
     pub sequence_number: u64,
-    cipher: Box<dyn TLSCipher>,
+    pub cipher: Box<dyn TLSCipher>,
 
     enc_key: Vec<u8>,
     iv: Vec<u8>,
@@ -45,7 +46,7 @@ macro_rules! require_entity {
 impl ConnectionState {
     pub fn create_no_encryption(entity: ConnectionEnd) -> Self {
         Self {
-            parameters: SecurityParameters::new(entity),
+            parameters: SecurityParameters::new_no_encryption(entity),
             sequence_number: 0,
             cipher: Box::new(cipher::TLSNullCipher {}),
             enc_key: Vec::new(),

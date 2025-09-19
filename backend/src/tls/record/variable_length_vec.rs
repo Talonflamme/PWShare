@@ -156,11 +156,21 @@ impl<const MIN: usize, const MAX: usize> VariableLengthVec<u8, MIN, MAX> {
         }
     }
 
-    pub fn try_into<const NEW_MIN: usize, const NEW_MAX: usize>(self) -> Result<VariableLengthVec<u8, NEW_MIN, NEW_MAX>, ()> {
+    pub fn try_into<const NEW_MIN: usize, const NEW_MAX: usize>(
+        self,
+    ) -> Result<VariableLengthVec<u8, NEW_MIN, NEW_MAX>, ()> {
         if self.len() < NEW_MIN || self.len() > NEW_MAX {
             Err(())
         } else {
             Ok(VariableLengthVec(self.0))
+        }
+    }
+
+    pub fn try_from(vec: Vec<u8>) -> Result<Self, ()> {
+        if vec.len() < MIN || vec.len() > MAX {
+            Err(())
+        } else {
+            Ok(Self(vec))
         }
     }
 }

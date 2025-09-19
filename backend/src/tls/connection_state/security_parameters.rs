@@ -75,6 +75,7 @@ impl SecurityParameters {
 
     pub fn new_no_encryption(entity: ConnectionEnd) -> Self {
         let mut params = Self::new(entity);
+        params.compression_algorithm = Some(CompressionMethod::Null);
         CipherSuite::TlsNullWithNullNull.set_security_params(&mut params);
         params
     }

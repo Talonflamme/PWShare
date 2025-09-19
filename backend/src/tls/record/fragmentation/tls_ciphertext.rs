@@ -6,6 +6,7 @@ use crate::tls::record::fragmentation::tls_plaintext::ContentType;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::ReadableFromStream;
 use std::io::{Error, ErrorKind, Read, Result};
+use crate::tls::record::cryptographic_attributes::StreamCiphered;
 
 pub(crate) struct GenericStreamCipher {
     pub content: Vec<u8>,
@@ -13,7 +14,7 @@ pub(crate) struct GenericStreamCipher {
 }
 
 impl GenericStreamCipher {
-    fn read(fragment: Vec<u8>, con_state: &ConnectionState) -> Result<Self> {
+    pub fn read(fragment: Vec<u8>, con_state: &ConnectionState) -> Result<Self> {
         let mac_length = con_state
             .parameters
             .mac_length
@@ -24,6 +25,14 @@ impl GenericStreamCipher {
         let mac = content.split_off(content.len() - mac_length);
 
         Ok(Self { content, mac })
+    }
+
+    pub fn to_bytes(self) -> Vec<u8> {
+        let mut content = self.content;
+        let mut mac = self.mac;
+
+        content.append(&mut mac);
+        content
     }
 }
 
@@ -44,7 +53,7 @@ impl GenericAEADCipher {
 }
 
 pub(crate) enum CipherType {
-    Stream(GenericStreamCipher),
+    Stream(StreamCiphered<GenericStreamCipher>),
     Block(GenericBlockCipher),
     Aead(GenericAEADCipher),
 }
@@ -91,7 +100,7 @@ impl TLSCiphertext {
             "Cipher type must be set by now",
         ))? {
             security_parameters::CipherType::Stream => {
-                CipherType::Stream(GenericStreamCipher::read(fragment_buf, current_read)?)
+                CipherType::Stream(StreamCiphered::new(fragment_buf))
             }
             security_parameters::CipherType::Block => {
                 CipherType::Block(GenericBlockCipher::read(fragment_buf, current_read)?)
@@ -108,7 +117,7 @@ impl TLSCiphertext {
         })
     }
 
-    pub fn decrypt(self, con_state: &mut ConnectionState) -> Result<TLSCompressed> {
-        todo!()
+    pub fn decrypt(self, con_state: &ConnectionState) -> Result<TLSCompressed> {
+        con_state.cipher.decrypt(self, con_state)
     }
 }
