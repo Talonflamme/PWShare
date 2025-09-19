@@ -1,5 +1,6 @@
 use crate::tls::connection_state::security_parameters::{ConnectionEnd, SecurityParameters};
-use crate::tls::record::ciphers::cipher::{self, TLSCipher};
+use crate::tls::record::ciphers::cipher::TLSCipher;
+use crate::tls::record::ciphers::TLSNullCipher;
 use std::io::{Error, ErrorKind, Result};
 
 #[derive(Debug)]
@@ -48,7 +49,7 @@ impl ConnectionState {
         Self {
             parameters: SecurityParameters::new_no_encryption(entity),
             sequence_number: 0,
-            cipher: Box::new(cipher::TLSNullCipher {}),
+            cipher: Box::new(TLSNullCipher {}),
             enc_key: Vec::new(),
             iv: Vec::new(),
             mac_key: Vec::new(),

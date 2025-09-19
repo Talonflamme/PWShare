@@ -1,7 +1,7 @@
 use super::mac::MACAlgorithm;
 use super::prf::PRFAlgorithm;
-use crate::tls::record::cipher_suite::CipherSuite;
 use crate::tls::connection_state::compression_method::CompressionMethod;
+use crate::tls::record::ciphers::cipher_suite::CipherSuite;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ConnectionEnd {
