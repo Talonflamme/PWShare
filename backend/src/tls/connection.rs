@@ -17,7 +17,6 @@ use crate::tls::record::hello::{extensions, ClientHello, ServerHello, SessionID}
 use crate::tls::record::key_exchange::rsa::PreMasterSecret;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::{ClientKeyExchange, Handshake, HandshakeType, Random};
-use crate::tls::WritableToSink;
 use crate::util::UintDisplay;
 use std::fs;
 use std::io::{Error, ErrorKind, Result, Write};
@@ -32,23 +31,20 @@ pub(crate) struct ConnectionStates {
 }
 
 impl ConnectionStates {
-    fn activate_pending(&mut self) -> Result<ConnectionState> {
-        // Ok(ConnectionState {
-        // 
-        // })
-        todo!()
+    fn activate_pending(&mut self, entity: ConnectionEnd) -> Result<ConnectionState> {
+        let mut param = self.pending_parameters.clone();
+        param.entity = Some(entity);
+        Ok(ConnectionState::new(param)?)
     }
 
     fn activate_pending_read(&mut self) -> Result<()> {
-        let mut read = self.activate_pending()?;
-        read.parameters.entity = Some(ConnectionEnd::Client);
+        let read = self.activate_pending(ConnectionEnd::Client)?;
         self.current_read = read;
         Ok(())
     }
 
     fn activate_pending_write(&mut self) -> Result<()> {
-        let mut write = self.activate_pending()?;
-        write.parameters.entity = Some(ConnectionEnd::Server);
+        let write = self.activate_pending(ConnectionEnd::Server)?;
         self.current_write = write;
         Ok(())
     }
@@ -266,7 +262,7 @@ impl Connection {
 
         // TODO: continue here
         self.read_change_cipher_spec()?;
-        self.connection_states.activate_pending_read();
+        self.connection_states.activate_pending_read()?;
 
         Ok(())
     }
