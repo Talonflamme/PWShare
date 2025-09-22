@@ -25,8 +25,8 @@ pub fn test_encrypt<K: AESKey, M: BasicModeOfOperation>(
     let plain = hex_to_u128_vec(plaintext);
     let expected = hex_to_u128_vec(expected);
 
-    let cipher = AESCipher::new(key, mode);
-    let actual = cipher.encrypt(plain.as_slice());
+    let cipher = AESCipher::new(key);
+    let actual = cipher.encrypt(plain.as_slice(), &mode);
 
     assert_eq!(actual, expected);
 }
@@ -66,8 +66,8 @@ pub fn test_decrypt<K: AESKey, M: BasicModeOfOperation>(
     let ciphertext = hex_to_u128_vec(ciphertext);
     let expected = hex_to_u128_vec(expected);
 
-    let cipher = AESCipher::new(key, mode);
-    let actual = cipher.decrypt(ciphertext.as_slice());
+    let cipher = AESCipher::new(key);
+    let actual = cipher.decrypt(ciphertext.as_slice(), &mode);
 
     assert_eq!(actual, expected);
 }
