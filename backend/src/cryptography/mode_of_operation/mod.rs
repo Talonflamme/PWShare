@@ -1,9 +1,9 @@
 use crate::cryptography::aes::AESKey;
 
-mod cbc;
-mod ctr;
-mod ecb;
-mod gcm;
+pub mod cbc;
+pub mod ctr;
+pub mod ecb;
+pub mod gcm;
 #[cfg(test)]
 mod tests;
 

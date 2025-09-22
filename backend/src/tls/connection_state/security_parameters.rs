@@ -24,6 +24,23 @@ pub enum CipherType {
     Aead,
 }
 
+macro_rules! impl_getters {
+    ($struct: ident, { $($field: ident : $ty:ty),* $(,)? }) => {
+        impl $struct {
+            $(
+                pub fn $field (&self) -> std::io::Result<&$ty> {
+                    self.$field.as_ref().ok_or(
+                        std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            concat!(stringify!($field), " must not be None")
+                        )
+                    )
+                }
+            )*
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct SecurityParameters {
     pub entity: Option<ConnectionEnd>,
@@ -45,6 +62,24 @@ pub struct SecurityParameters {
     pub client_random: Option<[u8; 32]>,
     pub server_random: Option<[u8; 32]>,
 }
+
+impl_getters!(SecurityParameters, {
+    entity: ConnectionEnd,
+    prf_algorithm: PRFAlgorithm,
+    bulk_cipher_algorithm: BulkCipherAlgorithm,
+    cipher_type: CipherType,
+    enc_key_length: u8,
+    block_length: u8,
+    fixed_iv_length: u8,
+    record_iv_length: u8,
+    mac_algorithm: MACAlgorithm,
+    mac_length: u8,
+    mac_key_length: u8,
+    compression_algorithm: CompressionMethod,
+    master_secret: [u8; 48],
+    client_random: [u8; 32],
+    server_random: [u8; 32],
+});
 
 impl SecurityParameters {
     pub fn new(entity: ConnectionEnd) -> Self {

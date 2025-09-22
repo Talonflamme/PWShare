@@ -1,7 +1,7 @@
 use crate::tls::connection::Connection;
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::connection_state::security_parameters;
-use crate::tls::record::cryptographic_attributes::StreamCiphered;
+use crate::tls::record::cryptographic_attributes::{BlockCiphered, StreamCiphered};
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::fragmentation::tls_plaintext::ContentType;
 use crate::tls::record::protocol_version::ProtocolVersion;
@@ -15,11 +15,7 @@ pub(crate) struct GenericStreamCipher {
 
 impl GenericStreamCipher {
     pub fn read(fragment: Vec<u8>, con_state: &ConnectionState) -> Result<Self> {
-        let mac_length = con_state
-            .parameters
-            .mac_length
-            .ok_or(Error::new(ErrorKind::Other, "MAC must be set by now"))?
-            as usize;
+        let mac_length = *con_state.parameters.mac_length()? as usize;
 
         let mut content = fragment;
         let mac = content.split_off(content.len() - mac_length);
@@ -36,7 +32,10 @@ impl GenericStreamCipher {
     }
 }
 
-pub(crate) struct GenericBlockCipher {}
+pub(crate) struct GenericBlockCipher {
+    pub iv: Vec<u8>,
+    pub inner: BlockCiphered<GenericBlockCipherInner>,
+}
 
 impl GenericBlockCipher {
     fn read(fragment: Vec<u8>, con_state: &ConnectionState) -> Result<Self> {
@@ -47,6 +46,25 @@ impl GenericBlockCipher {
 impl WritableToSink for GenericBlockCipher {
     fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
         todo!()
+    }
+}
+
+pub(crate) struct GenericBlockCipherInner {
+    pub content: Vec<u8>,
+    pub mac: Vec<u8>,
+    pub padding: Vec<u8>,
+    pub padding_length: u8,
+}
+
+impl GenericBlockCipherInner {
+    pub fn to_bytes(mut self) -> Vec<u8> {
+        let mut result =
+            Vec::with_capacity(self.content.len() + self.mac.len() + self.padding.len() + 1);
+        result.append(&mut self.content);
+        result.append(&mut self.mac);
+        result.append(&mut self.padding);
+        result.push(self.padding_length);
+        result
     }
 }
 
@@ -121,10 +139,7 @@ impl TLSCiphertext {
 
         let current_read = &connection.connection_states.current_read;
 
-        let fragment = match current_read.parameters.cipher_type.ok_or(Error::new(
-            ErrorKind::Other,
-            "Cipher type must be set by now",
-        ))? {
+        let fragment = match current_read.parameters.cipher_type()? {
             security_parameters::CipherType::Stream => {
                 CipherType::Stream(StreamCiphered::new(fragment_buf))
             }

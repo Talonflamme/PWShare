@@ -15,7 +15,7 @@ pub trait HashFunction {
 }
 
 macro_rules! copy_chunk_into_words_be {
-    ($bytes:ident, $words:ident, $ty: ident) => {
+    ($bytes:expr, $words:ident, $ty: ident) => {
         for (i, chunk) in $bytes.chunks_exact(($ty::BITS / 8) as usize).enumerate() {
             $words[i] = $ty::from_be_bytes(chunk.try_into().unwrap());
         }
@@ -29,6 +29,8 @@ macro_rules! copy_chunk_into_words_le {
         }
     };
 }
+
+pub(crate) use copy_chunk_into_words_be;
 
 pub struct Md5;
 

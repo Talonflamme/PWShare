@@ -1,4 +1,5 @@
 use crate::tls::connection_state::connection_state::ConnectionState;
+use crate::tls::record::change_cipher_spec::ChangeCipherSpec;
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
@@ -64,7 +65,7 @@ impl TLSPlaintext {
 
         match content {
             ContentTypeWithContent::Handshake(h) => h.write(&mut bytes)?,
-            _ => todo!()
+            _ => todo!(),
         };
 
         let fragment: VariableLengthVec<u8, 0, 16384> = bytes.into();
@@ -107,7 +108,35 @@ impl TLSPlaintext {
         let frag: Vec<u8> = self.fragment.into();
         let mut iter = frag.into_iter();
 
-        Handshake::read(&mut iter)
+        let handshake = Handshake::read(&mut iter)?;
+
+        if iter.next().is_some() {
+            Err(Error::new(ErrorKind::InvalidData, "Too many bytes"))
+        } else {
+            Ok(handshake)
+        }
+    }
+
+    /// Returns a `ChangeCipherSpec` that is parsed from `self.fragment` if `self.content_type`
+    /// is `ChangeCipherSpec`. Returns an `Err` otherwise.
+    pub fn get_change_cipher_spec(self) -> Result<ChangeCipherSpec> {
+        if self.content_type != ContentType::ChangeCipherSpec {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                format!("ChangeCipherSpec expected, got: {:?}", self.content_type),
+            ));
+        }
+
+        let frag: Vec<u8> = self.fragment.into();
+        let mut iter = frag.into_iter();
+
+        let ccs = ChangeCipherSpec::read(&mut iter)?;
+
+        if iter.next().is_some() {
+            Err(Error::new(ErrorKind::InvalidData, "Too many bytes"))
+        } else {
+            Ok(ccs)
+        }
     }
 
     /// Compresses the Plaintext into a `TLSCompressed` given the connection state.
@@ -115,12 +144,7 @@ impl TLSPlaintext {
     pub fn compress(self, con_state: &ConnectionState) -> Result<TLSCompressed> {
         let compression = con_state
             .parameters
-            .compression_algorithm
-            .as_ref()
-            .ok_or(Error::new(
-                ErrorKind::Other,
-                "No compression algorithm negotiated",
-            ))?;
+            .compression_algorithm()?;
 
         Ok(TLSCompressed {
             content_type: self.content_type,

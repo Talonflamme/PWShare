@@ -2,9 +2,9 @@ use crate::cryptography::aes::aes::AES;
 use crate::cryptography::aes::sbox::SBOX;
 use crate::cryptography::rng::rng;
 use rand::RngCore;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
-pub trait AESKey: Clone {
+pub trait AESKey: Clone + Debug {
     const VARIANT: AES;
     /// N is the length of the key in 32-bit words
     const N: usize;
@@ -68,11 +68,18 @@ macro_rules! impl_aes_key {
 
         impl Display for $name {
             fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+                write!(f, "0x");
                 for u in self.key {
-                    write!(f, "0x{:08x}", u)?;
+                    write!(f, "{:08x}", u)?;
                 }
 
                 Ok(())
+            }
+        }
+        
+        impl Debug for $name {
+            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+                Display::fmt(self, f)
             }
         }
 

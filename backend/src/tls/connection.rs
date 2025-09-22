@@ -7,6 +7,7 @@ use crate::tls::connection_state::security_parameters::{
     ConnectionEnd, SecurityParameters,
 };
 use crate::tls::record::certificate::{ASN1Cert, Certificate};
+use crate::tls::record::change_cipher_spec::ChangeCipherSpec;
 use crate::tls::record::ciphers::cipher_suite;
 use crate::tls::record::fragmentation::tls_ciphertext::TLSCiphertext;
 use crate::tls::record::fragmentation::tls_plaintext::{ContentTypeWithContent, TLSPlaintext};
@@ -17,10 +18,10 @@ use crate::tls::record::key_exchange::rsa::PreMasterSecret;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::{ClientKeyExchange, Handshake, HandshakeType, Random};
 use crate::tls::WritableToSink;
+use crate::util::UintDisplay;
 use std::fs;
 use std::io::{Error, ErrorKind, Result, Write};
 use std::net::TcpStream;
-use crate::util::UintDisplay;
 
 pub(crate) struct ConnectionStates {
     pub(crate) current_read: ConnectionState,
@@ -28,6 +29,33 @@ pub(crate) struct ConnectionStates {
     /// The security parameters of the pending write/read states. The `entity` field must
     /// be newly assigned when the pending states become the current states.
     pub(crate) pending_parameters: SecurityParameters,
+}
+
+impl ConnectionStates {
+    fn activate_pending(&mut self) -> Result<ConnectionState> {
+        // Ok(ConnectionState {
+        // 
+        // })
+        todo!()
+    }
+
+    fn activate_pending_read(&mut self) -> Result<()> {
+        let mut read = self.activate_pending()?;
+        read.parameters.entity = Some(ConnectionEnd::Client);
+        self.current_read = read;
+        Ok(())
+    }
+
+    fn activate_pending_write(&mut self) -> Result<()> {
+        let mut write = self.activate_pending()?;
+        write.parameters.entity = Some(ConnectionEnd::Server);
+        self.current_write = write;
+        Ok(())
+    }
+
+    fn reset_pending(&mut self) {
+        self.pending_parameters = SecurityParameters::new_empty();
+    }
 }
 
 /// The `Connection` struct holds information about a single connection to a single
@@ -54,6 +82,15 @@ impl Connection {
         }
     }
 
+    fn read_change_cipher_spec(&mut self) -> Result<ChangeCipherSpec> {
+        let ciphertext = TLSCiphertext::read_from_connection(self)?;
+        let compressed = ciphertext.decrypt(&self.connection_states.current_read)?;
+        let plaintext = compressed.decompress(&self.connection_states.current_read)?;
+
+        let ccs = plaintext.get_change_cipher_spec()?;
+        Ok(ccs)
+    }
+
     fn read_handshake(&mut self) -> Result<Handshake> {
         let ciphertext = TLSCiphertext::read_from_connection(self)?;
         let compressed = ciphertext.decrypt(&self.connection_states.current_read)?;
@@ -61,7 +98,6 @@ impl Connection {
 
         let handshake = plaintext.get_handshake()?;
 
-        // TODO: or ChangeCipherSpec
         Ok(handshake)
     }
 
@@ -224,9 +260,13 @@ impl Connection {
         let pre_master = self.decode_pre_master_secret(client_key_exchange)?;
         let master = self.convert_pre_master_to_master(pre_master)?;
 
-        // println!("{}", (&master[..]).hex());
-        
+        println!("{}", (&master[..]).hex());
+
         self.connection_states.pending_parameters.master_secret = Some(master);
+
+        // TODO: continue here
+        self.read_change_cipher_spec()?;
+        self.connection_states.activate_pending_read();
 
         Ok(())
     }

@@ -5,7 +5,7 @@ use crate::tls::record::fragmentation::tls_plaintext::{ContentType, TLSPlaintext
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use crate::tls::WritableToSink;
-use std::io::{Error, ErrorKind, Result};
+use std::io::Result;
 
 pub struct TLSCompressed {
     pub(crate) content_type: ContentType,
@@ -19,12 +19,7 @@ impl TLSCompressed {
     pub fn decompress(self, con_state: &ConnectionState) -> Result<TLSPlaintext> {
         let compression = con_state
             .parameters
-            .compression_algorithm
-            .as_ref()
-            .ok_or(Error::new(
-                ErrorKind::Other,
-                "No compression algorithm negotiated",
-            ))?;
+            .compression_algorithm()?;
 
         Ok(TLSPlaintext {
             content_type: self.content_type,
@@ -41,9 +36,7 @@ impl TLSCompressed {
     pub fn generate_mac(&self, con_state: &ConnectionState) -> Result<Vec<u8>> {
         let mac_alg = con_state
             .parameters
-            .mac_algorithm
-            .as_ref()
-            .ok_or(Error::new(ErrorKind::Other, "MAC must be set by now"))?;
+            .mac_algorithm()?;
 
         if matches!(mac_alg, MACAlgorithm::Null) {
             return Ok(Vec::new());

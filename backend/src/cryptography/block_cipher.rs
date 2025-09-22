@@ -1,6 +1,7 @@
 use crate::cryptography::mode_of_operation::*;
 use crate::cryptography::aes::AESKey;
 
+#[derive(Debug)]
 pub struct AESCipher<K: AESKey, M: BasicModeOfOperation> {
     pub key: K,
     pub mode: M

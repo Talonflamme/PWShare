@@ -1,25 +1,36 @@
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::record::ciphers::cipher::TLSCipher;
 use crate::tls::record::cryptographic_attributes::StreamCiphered;
-use crate::tls::record::fragmentation::tls_ciphertext::{CipherType, GenericStreamCipher, TLSCiphertext};
+use crate::tls::record::fragmentation::tls_ciphertext::{
+    CipherType, GenericStreamCipher, TLSCiphertext,
+};
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use std::fmt::Debug;
 use std::io::{Error, ErrorKind};
 
-pub trait TLSStreamCipher: Debug {
+#[derive(Debug)]
+pub struct TLSNullCipher;
+
+impl TLSNullCipher {
     fn encrypt_struct(
         &self,
         fragment: GenericStreamCipher,
-    ) -> std::io::Result<StreamCiphered<GenericStreamCipher>>;
+    ) -> std::io::Result<StreamCiphered<GenericStreamCipher>> {
+        // no encryption
+        Ok(StreamCiphered::new(fragment.to_bytes()))
+    }
+
     fn decrypt_struct(
         &self,
         fragment: StreamCiphered<GenericStreamCipher>,
         con_state: &ConnectionState,
-    ) -> std::io::Result<GenericStreamCipher>;
+    ) -> std::io::Result<GenericStreamCipher> {
+        GenericStreamCipher::read(fragment.bytes, con_state)
+    }
 }
 
-impl<T: TLSStreamCipher> TLSCipher for T {
+impl TLSCipher for TLSNullCipher {
     fn encrypt(
         &self,
         plaintext: TLSCompressed,
@@ -72,26 +83,5 @@ impl<T: TLSStreamCipher> TLSCipher for T {
         } else {
             Err(Error::new(ErrorKind::Other, "MAC mismatch"))
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct TLSNullCipher;
-
-impl TLSStreamCipher for TLSNullCipher {
-    fn encrypt_struct(
-        &self,
-        fragment: GenericStreamCipher,
-    ) -> std::io::Result<StreamCiphered<GenericStreamCipher>> {
-        // no encryption
-        Ok(StreamCiphered::new(fragment.to_bytes()))
-    }
-
-    fn decrypt_struct(
-        &self,
-        fragment: StreamCiphered<GenericStreamCipher>,
-        con_state: &ConnectionState,
-    ) -> std::io::Result<GenericStreamCipher> {
-        GenericStreamCipher::read(fragment.bytes, con_state)
     }
 }

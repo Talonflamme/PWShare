@@ -1,6 +1,7 @@
 use crate::cryptography::aes::{aes_decrypt, aes_encrypt, AESKey};
 use crate::cryptography::mode_of_operation::{BasicModeOfOperation, ModeOfOperation};
 
+#[derive(Debug)]
 /// The `Cipher Block Chaining` mode encodes each block and XORed the result with the next
 /// message in order. The resulting cipher of that is then again XORed with the next block.
 /// https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Cipher_block_chaining_(CBC)
