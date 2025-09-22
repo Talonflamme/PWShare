@@ -19,11 +19,13 @@ pub trait TLSBlockCipher: Debug + TLSCipher {
     fn encrypt_struct(
         &self,
         fragment: GenericBlockCipherInner,
+        iv: &[u8],
     ) -> Result<BlockCiphered<GenericBlockCipherInner>>;
     fn decrypt_struct(
         &self,
         fragment: BlockCiphered<GenericBlockCipherInner>,
         con_state: &ConnectionState,
+        iv: &[u8],
     ) -> Result<GenericBlockCipherInner>;
 }
 
@@ -39,25 +41,19 @@ pub struct TLSAesCbcCipher {
 }
 
 impl TLSAesCbcCipher {
-    pub fn new(key: Vec<u8>, iv: Vec<u8>) -> Result<Self> {
-        if iv.len() != 16 {
-            return Err(Error::new(ErrorKind::Other, "IV must have 128-bit"));
-        }
-
-        let iv = u128::from_be_bytes(iv.try_into().unwrap());
-
+    pub fn new(key: Vec<u8>) -> Result<Self> {
         let key = match key.len() {
             16 => {
                 let mut words = [0u32; 4];
                 copy_chunk_into_words_be!(key.as_slice(), words, u32);
                 let key = AESKey128::new(words);
-                AnyAESCipher::AES128(AESCipher::new(key, CBC { iv }))
+                AnyAESCipher::AES128(AESCipher::new(key))
             }
             32 => {
                 let mut words = [0u32; 8];
                 copy_chunk_into_words_be!(key.as_slice(), words, u32);
                 let key = AESKey256::new(words);
-                AnyAESCipher::AES256(AESCipher::new(key, CBC { iv }))
+                AnyAESCipher::AES256(AESCipher::new(key))
             }
             _ => {
                 return Err(Error::new(
@@ -99,8 +95,8 @@ fn block_encrypt(
     };
 
     let generic_block_cipher = GenericBlockCipher {
+        inner: cipher.encrypt_struct(inner, &iv)?,
         iv,
-        inner: cipher.encrypt_struct(inner)?,
     };
 
     Ok(TLSCiphertext {
@@ -124,7 +120,7 @@ fn block_decrypt(
         ));
     };
 
-    let inner = cipher.decrypt_struct(fragment.inner, con_state)?;
+    let inner = cipher.decrypt_struct(fragment.inner, con_state, &fragment.iv)?;
     let mac = inner.mac.clone();
 
     let fragment_bytes: VariableLengthVec<u8, 0, 17408> = inner.to_bytes().into();
@@ -149,6 +145,7 @@ impl TLSBlockCipher for TLSAesCbcCipher {
     fn encrypt_struct(
         &self,
         fragment: GenericBlockCipherInner,
+        iv: &[u8],
     ) -> Result<BlockCiphered<GenericBlockCipherInner>> {
         let bytes = fragment.to_bytes();
 
@@ -164,12 +161,14 @@ impl TLSBlockCipher for TLSAesCbcCipher {
             .map(|chunk| u128::from_be_bytes(chunk.try_into().unwrap()))
             .collect();
 
-        // TODO: include IV here
+        let iv = u128::from_be_bytes(
+            iv.try_into()
+                .map_err(|_| Error::new(ErrorKind::InvalidInput, "iv has incorrect length"))?,
+        );
+
         let ciphertext = match &self.key {
-            AnyAESCipher::AES128(aes128) => {
-                aes128.encrypt(chunks.as_slice())
-            },
-            AnyAESCipher::AES256(aes256) => {aes256.encrypt(chunks.as_slice())},
+            AnyAESCipher::AES128(aes128) => aes128.encrypt(chunks.as_slice(), &CBC { iv }),
+            AnyAESCipher::AES256(aes256) => aes256.encrypt(chunks.as_slice(), &CBC { iv }),
         };
 
         let bytes: Vec<u8> = ciphertext
@@ -184,6 +183,7 @@ impl TLSBlockCipher for TLSAesCbcCipher {
         &self,
         fragment: BlockCiphered<GenericBlockCipherInner>,
         con_state: &ConnectionState,
+        iv: &[u8],
     ) -> Result<GenericBlockCipherInner> {
         let bytes = fragment.bytes;
         let mac_length = *con_state.parameters.mac_length()? as usize;
@@ -197,13 +197,20 @@ impl TLSBlockCipher for TLSAesCbcCipher {
             .map(|c| u128::from_be_bytes(c.try_into().unwrap()))
             .collect();
 
-        // TODO: IV here
+        let iv = u128::from_be_bytes(
+            iv.try_into()
+                .map_err(|_| Error::new(ErrorKind::InvalidInput, "iv has incorrect length"))?,
+        );
+
         let plaintext = match &self.key {
-            AnyAESCipher::AES128(aes128) => aes128.decrypt(chunks.as_slice()),
-            AnyAESCipher::AES256(aes256) => aes256.decrypt(chunks.as_slice()),
+            AnyAESCipher::AES128(aes128) => aes128.decrypt(chunks.as_slice(), &CBC { iv }),
+            AnyAESCipher::AES256(aes256) => aes256.decrypt(chunks.as_slice(), &CBC { iv }),
         };
 
-        let mut bytes: Vec<u8> = plaintext.into_iter().flat_map(|x| x.to_be_bytes()).collect();
+        let mut bytes: Vec<u8> = plaintext
+            .into_iter()
+            .flat_map(|x| x.to_be_bytes())
+            .collect();
         let padding_length = bytes.pop().unwrap();
 
         if padding_length as usize > bytes.len() - mac_length {

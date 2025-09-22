@@ -44,12 +44,12 @@ macro_rules! require_entity {
     };
 }
 
-fn get_cipher(cipher_type: BulkCipherAlgorithm, key: Vec<u8>, iv: Vec<u8>) -> Result<Box<dyn TLSCipher>> {
+fn get_cipher(cipher_type: BulkCipherAlgorithm, key: Vec<u8>) -> Result<Box<dyn TLSCipher>> {
     match cipher_type {
         BulkCipherAlgorithm::Null => Ok(Box::new(TLSNullCipher {})),
         BulkCipherAlgorithm::Rc4 => Err(Error::new(ErrorKind::Other, "Not implemented")),
         BulkCipherAlgorithm::TDes => Err(Error::new(ErrorKind::Other, "Not implemented")),
-        BulkCipherAlgorithm::Aes => Ok(Box::new(TLSAesCbcCipher::new(key, iv)?)),
+        BulkCipherAlgorithm::Aes => Ok(Box::new(TLSAesCbcCipher::new(key)?)),
     }
 }
 
@@ -85,11 +85,9 @@ impl ConnectionState {
         let entity = *parameters.entity()?;
         let mac_key_length = *parameters.mac_key_length()? as usize;
         let enc_key_length = *parameters.enc_key_length()? as usize;
-        let fixed_iv_length = *parameters.fixed_iv_length()? as usize;
 
         let mac_key: Vec<u8>;
         let enc_key: Vec<u8>;
-        let iv: Vec<u8>;
 
         if entity == ConnectionEnd::Client {
             mac_key = key_block.by_ref().take(mac_key_length).collect(); // take client_write_MAC_key
@@ -97,10 +95,6 @@ impl ConnectionState {
                 .by_ref()
                 .skip(mac_key_length) // skip server_write_MAC_key
                 .take(enc_key_length) // take client_write_key
-                .collect();
-            iv = key_block
-                .skip(enc_key_length) // skip server_write_key
-                .take(fixed_iv_length) // take client_write_IV
                 .collect();
         } else {
             mac_key = key_block
@@ -113,10 +107,6 @@ impl ConnectionState {
                 .skip(enc_key_length) // skip client_write_key
                 .take(enc_key_length) // take server_write_key
                 .collect();
-            iv = key_block
-                .skip(fixed_iv_length) // skip client_write_IV
-                .take(fixed_iv_length) // take server_write_IV
-                .collect();
         }
 
         let bulk_cipher = *parameters.bulk_cipher_algorithm()?;
@@ -124,7 +114,7 @@ impl ConnectionState {
         Ok(Self {
             parameters,
             sequence_number: 0,
-            cipher: get_cipher(bulk_cipher, enc_key, iv)?,
+            cipher: get_cipher(bulk_cipher, enc_key)?,
             mac_key,
         })
     }
