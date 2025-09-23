@@ -120,6 +120,8 @@ fn block_decrypt(
         ));
     };
 
+    // TODO: even when decrypting the struct due to wrong padding fails, the mac should
+    //  still be computed to prevent timing attacks
     let inner = cipher.decrypt_struct(fragment.inner, con_state, &fragment.iv)?;
     let mac = inner.mac;
 
