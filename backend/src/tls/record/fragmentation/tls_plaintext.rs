@@ -19,7 +19,7 @@ pub enum ContentType {
 }
 
 pub enum ContentTypeWithContent {
-    ChangeCipherSpec(),
+    ChangeCipherSpec(ChangeCipherSpec),
     Alert(),
     Handshake(Handshake),
     ApplicationData(),
@@ -28,7 +28,7 @@ pub enum ContentTypeWithContent {
 impl Into<ContentType> for &ContentTypeWithContent {
     fn into(self) -> ContentType {
         match self {
-            ContentTypeWithContent::ChangeCipherSpec() => ContentType::ChangeCipherSpec,
+            ContentTypeWithContent::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
             ContentTypeWithContent::Alert() => ContentType::Alert,
             ContentTypeWithContent::Handshake(_) => ContentType::Handshake,
             ContentTypeWithContent::ApplicationData() => ContentType::ApplicationData,
@@ -65,6 +65,7 @@ impl TLSPlaintext {
 
         match content {
             ContentTypeWithContent::Handshake(h) => h.write(&mut bytes)?,
+            ContentTypeWithContent::ChangeCipherSpec(c) => c.write(&mut bytes)?,
             _ => todo!(),
         };
 
@@ -83,7 +84,7 @@ impl TLSPlaintext {
         let mut iter = Into::<Vec<u8>>::into(self.fragment).into_iter();
 
         Ok(match self.content_type {
-            ContentType::ChangeCipherSpec => ContentTypeWithContent::ChangeCipherSpec(),
+            ContentType::ChangeCipherSpec => ContentTypeWithContent::ChangeCipherSpec(ChangeCipherSpec::read(&mut iter)?),
             ContentType::Alert => ContentTypeWithContent::Alert(),
             ContentType::Handshake => {
                 ContentTypeWithContent::Handshake(Handshake::read(&mut iter)?)

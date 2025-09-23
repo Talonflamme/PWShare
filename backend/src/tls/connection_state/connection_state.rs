@@ -17,31 +17,7 @@ pub struct ConnectionState {
     pub sequence_number: u64,
     pub cipher: Box<dyn TLSCipher>,
 
-    mac_key: Vec<u8>,
-}
-
-macro_rules! require_entity {
-    ($self: expr, $field: expr, Client) => {
-        if let Some(entity) = $self.parameters.entity {
-            match entity {
-                ConnectionEnd::Server => Err(Error::new(ErrorKind::Other, "Not client end")),
-                ConnectionEnd::Client => Ok($field),
-            }
-        } else {
-            Err(Error::new(ErrorKind::Other, "No entity specified"))
-        }
-    };
-
-    ($self: expr, $field: expr, Server) => {
-        if let Some(entity) = $self.parameters.entity {
-            match entity {
-                ConnectionEnd::Server => Ok($field),
-                ConnectionEnd::Client => Err(Error::new(ErrorKind::Other, "Not server end")),
-            }
-        } else {
-            Err(Error::new(ErrorKind::Other, "No entity specified"))
-        }
-    };
+    pub mac_key: Vec<u8>,
 }
 
 fn get_cipher(cipher_type: BulkCipherAlgorithm, key: Vec<u8>) -> Result<Box<dyn TLSCipher>> {
@@ -117,13 +93,5 @@ impl ConnectionState {
             cipher: get_cipher(bulk_cipher, enc_key)?,
             mac_key,
         })
-    }
-
-    pub fn get_client_write_mac_key(&self) -> Result<&Vec<u8>> {
-        require_entity!(self, &self.mac_key, Client)
-    }
-
-    pub fn get_server_write_mac_key(&self) -> Result<&Vec<u8>> {
-        require_entity!(self, &self.mac_key, Server)
     }
 }

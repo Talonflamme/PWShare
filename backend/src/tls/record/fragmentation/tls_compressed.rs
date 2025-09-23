@@ -55,7 +55,7 @@ impl TLSCompressed {
         (self.fragment.len() as u16).write(&mut message)?; // .length
         message.extend_from_slice(self.fragment.as_slice()); // .fragment
 
-        let write_key = con_state.get_client_write_mac_key()?.as_slice();
+        let write_key = con_state.mac_key.as_slice();
         Ok(mac_alg.hmac(write_key, message.as_slice()))
     }
 }

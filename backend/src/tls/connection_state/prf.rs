@@ -88,7 +88,7 @@ impl Iterator for PHash {
 }
 
 impl PRFAlgorithm {
-    fn get_hash(&self) -> Box<dyn HashFunction> {
+    pub fn get_hash(&self) -> Box<dyn HashFunction> {
         match self {
             PRFAlgorithm::TlsPrfSha256 => Box::new(Sha256),
         }

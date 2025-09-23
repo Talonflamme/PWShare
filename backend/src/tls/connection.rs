@@ -15,7 +15,6 @@ use crate::tls::record::hello::{extensions, ClientHello, ServerHello, SessionID}
 use crate::tls::record::key_exchange::rsa::PreMasterSecret;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::{ClientKeyExchange, Finished, Handshake, HandshakeType, Random};
-use crate::util::UintDisplay;
 use std::fs;
 use std::io::{Error, ErrorKind, Result, Write};
 use std::net::TcpStream;
@@ -60,6 +59,9 @@ pub struct Connection {
     pub(crate) stream: TcpStream,
     /// The current/pending read/write states
     pub(crate) connection_states: ConnectionStates,
+    /// All handshake messages concatenated. This does not include HelloRequest and the next message
+    /// (Finished) but all others in order.
+    handshake_messages: Vec<u8>,
 }
 
 impl Connection {
@@ -73,6 +75,7 @@ impl Connection {
         Connection {
             stream,
             connection_states: states,
+            handshake_messages: Vec::new(),
         }
     }
 
@@ -85,31 +88,35 @@ impl Connection {
         Ok(ccs)
     }
 
-    fn read_handshake(&mut self) -> Result<Handshake> {
+    /// Returns the parsed Handshake and the bytes of the handshake message as a raw
+    /// `Vec<u8>`.
+    fn read_handshake(&mut self) -> Result<(Handshake, Vec<u8>)> {
         let ciphertext = TLSCiphertext::read_from_connection(self)?;
         let compressed = ciphertext.decrypt(&self.connection_states.current_read)?;
         let plaintext = compressed.decompress(&self.connection_states.current_read)?;
 
+        let bytes = plaintext.fragment.clone();
+
         let handshake = plaintext.get_handshake()?;
 
-        Ok(handshake)
+        Ok((handshake, bytes))
     }
 
-    fn read_client_hello(&mut self) -> Result<ClientHello> {
-        let handshake = self.read_handshake()?;
+    fn read_client_hello(&mut self) -> Result<(ClientHello, Vec<u8>)> {
+        let (handshake, bytes) = self.read_handshake()?;
 
         if let HandshakeType::ClientHello(ch) = handshake.msg_type {
-            Ok(ch)
+            Ok((ch, bytes))
         } else {
             Err(Error::new(ErrorKind::InvalidInput, "Expected ClientHello"))
         }
     }
 
-    fn read_client_key_exchange(&mut self) -> Result<ClientKeyExchange> {
-        let handshake = self.read_handshake()?;
+    fn read_client_key_exchange(&mut self) -> Result<(ClientKeyExchange, Vec<u8>)> {
+        let (handshake, bytes) = self.read_handshake()?;
 
         if let HandshakeType::ClientKeyExchange(cke) = handshake.msg_type {
-            Ok(cke)
+            Ok((cke, bytes))
         } else {
             Err(Error::new(
                 ErrorKind::InvalidInput,
@@ -118,17 +125,17 @@ impl Connection {
         }
     }
 
-    fn read_finished(&mut self) -> Result<Finished> {
-        let handshake = self.read_handshake()?;
+    fn read_finished(&mut self) -> Result<(Finished, Vec<u8>)> {
+        let (handshake, bytes) = self.read_handshake()?;
 
         if let HandshakeType::Finished(f) = handshake.msg_type {
-            Ok(f)
+            Ok((f, bytes))
         } else {
             Err(Error::new(ErrorKind::InvalidInput, "Expected Finished"))
         }
     }
 
-    fn send_server_hello(&mut self, client_hello: &ClientHello) -> Result<()> {
+    fn send_server_hello(&mut self, client_hello: &ClientHello) -> Result<Vec<u8>> {
         let cipher_suite = cipher_suite::select_cipher_suite(&client_hello.cipher_suites).unwrap();
         let mut extensions = extensions::filter_extensions(&client_hello.extensions);
 
@@ -160,12 +167,10 @@ impl Connection {
             Some(server_hello.random.to_bytes());
 
         let handshake = Handshake::new(HandshakeType::ServerHello(server_hello));
-        self.send_fragment(ContentTypeWithContent::Handshake(handshake))?;
-
-        Ok(())
+        self.send_fragment(ContentTypeWithContent::Handshake(handshake))
     }
 
-    fn send_certificate(&mut self) -> Result<()> {
+    fn send_certificate(&mut self) -> Result<Vec<u8>> {
         let asn1cert = ASN1Cert::from_file("cert.pem")?;
 
         let certificate = Certificate {
@@ -173,31 +178,55 @@ impl Connection {
         };
 
         let handshake = Handshake::new(HandshakeType::Certificate(certificate));
-        self.send_fragment(ContentTypeWithContent::Handshake(handshake))?;
-
-        Ok(())
+        self.send_fragment(ContentTypeWithContent::Handshake(handshake))
     }
 
-    fn send_server_hello_done(&mut self) -> Result<()> {
+    fn send_server_hello_done(&mut self) -> Result<Vec<u8>> {
         let server_hello_done = ServerHelloDone {};
 
         let handshake = Handshake::new(HandshakeType::ServerHelloDone(server_hello_done));
-        self.send_fragment(ContentTypeWithContent::Handshake(handshake))?;
-
-        Ok(())
+        self.send_fragment(ContentTypeWithContent::Handshake(handshake))
     }
 
     /// Responds to the ClientHello Message by sending a ServerHello, Certificate and ServerHelloDone
-    /// message while also adjusting the pending SecurityParameters.
+    /// message while also adjusting the pending SecurityParameters. Also adds the bytes of the
+    /// handshake layer to `self.handshake_messages`.
     fn respond_to_client_hello(&mut self, client_hello: &ClientHello) -> Result<()> {
-        self.send_server_hello(client_hello)?;
-        self.send_certificate()?;
-        self.send_server_hello_done()?;
+        let mut bytes = self.send_server_hello(client_hello)?;
+        self.handshake_messages.append(&mut bytes);
+
+        bytes = self.send_certificate()?;
+        self.handshake_messages.append(&mut bytes);
+
+        bytes = self.send_server_hello_done()?;
+        self.handshake_messages.append(&mut bytes);
+
         Ok(())
     }
 
-    fn send_fragment(&mut self, content: ContentTypeWithContent) -> Result<()> {
+    fn send_change_cipher_spec(&mut self) -> Result<Vec<u8>> {
+        let change_cipher_spec = ChangeCipherSpec::ChangeCipherSpec;
+        self.send_fragment(ContentTypeWithContent::ChangeCipherSpec(change_cipher_spec))
+    }
+
+    fn send_finished(&mut self) -> Result<Vec<u8>> {
+        let verify_data = Finished::calculate_verify_data(
+            &self.connection_states.current_write,
+            &self.handshake_messages,
+        )?;
+
+        let finished = Finished::new(verify_data);
+        let handshake = Handshake::new(HandshakeType::Finished(finished));
+        self.send_fragment(ContentTypeWithContent::Handshake(handshake))
+    }
+
+    /// Sends the `content`, adds a header and encrypts the message. Returns the bytes of the
+    /// handshake message (without header).
+    fn send_fragment(&mut self, content: ContentTypeWithContent) -> Result<Vec<u8>> {
         let tls_plaintext = TLSPlaintext::new(content, ProtocolVersion::tls1_2())?;
+
+        let handshake_bytes = tls_plaintext.fragment.clone();
+
         let tls_compressed = tls_plaintext.compress(&self.connection_states.current_write)?;
         let tls_ciphertext = tls_compressed.encrypt(&self.connection_states.current_write)?;
 
@@ -206,7 +235,7 @@ impl Connection {
 
         self.stream.write_all(bytes.as_slice())?;
 
-        Ok(())
+        Ok(handshake_bytes)
     }
 
     fn decode_pre_master_secret(
@@ -254,27 +283,39 @@ impl Connection {
     }
 
     pub fn start_handshake(&mut self) -> Result<()> {
-        let client_hello = self.read_client_hello()?;
+        let (client_hello, mut client_hello_bytes) = self.read_client_hello()?;
+        self.handshake_messages.append(&mut client_hello_bytes);
 
         // send ServerHello, Certificate, ServerHelloDone
         self.respond_to_client_hello(&client_hello)?;
 
-        let client_key_exchange = self.read_client_key_exchange()?;
+        let (client_key_exchange, mut bytes) = self.read_client_key_exchange()?;
+        self.handshake_messages.append(&mut bytes);
 
         let pre_master = self.decode_pre_master_secret(client_key_exchange)?;
         let master = self.convert_pre_master_to_master(pre_master)?;
 
-        println!("{}", (&master[..]).hex());
-
         self.connection_states.pending_parameters.master_secret = Some(master);
 
-        // TODO: continue here
+        // ChangeCipherSpec is not included in `handshake_messages`
         self.read_change_cipher_spec()?;
+
         self.connection_states.activate_pending_read()?;
 
-        let finished = self.read_finished()?;
+        let (finished, mut bytes) = self.read_finished()?;
 
-        println!("{:?}", finished);
+        finished.verify(
+            &self.connection_states.current_read,
+            &self.handshake_messages,
+        )?;
+
+        self.handshake_messages.append(&mut bytes);
+
+        self.send_change_cipher_spec()?;
+        self.connection_states.activate_pending_write()?;
+        self.connection_states.reset_pending();
+
+        self.send_finished()?;
 
         Ok(())
     }
