@@ -121,9 +121,9 @@ fn block_decrypt(
     };
 
     let inner = cipher.decrypt_struct(fragment.inner, con_state, &fragment.iv)?;
-    let mac = inner.mac.clone();
+    let mac = inner.mac;
 
-    let fragment_bytes: VariableLengthVec<u8, 0, 17408> = inner.to_bytes().into();
+    let fragment_bytes: VariableLengthVec<u8, 0, 17408> = inner.content.into();
     fragment_bytes.check_bounds()?;
 
     let tls_compressed = TLSCompressed {

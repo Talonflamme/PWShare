@@ -3,9 +3,7 @@ use crate::cryptography::pkcs1_v1_5;
 use crate::cryptography::rsa::PrivateKey;
 use crate::tls::connection_state::compression_method::CompressionMethod;
 use crate::tls::connection_state::connection_state::ConnectionState;
-use crate::tls::connection_state::security_parameters::{
-    ConnectionEnd, SecurityParameters,
-};
+use crate::tls::connection_state::security_parameters::{ConnectionEnd, SecurityParameters};
 use crate::tls::record::certificate::{ASN1Cert, Certificate};
 use crate::tls::record::change_cipher_spec::ChangeCipherSpec;
 use crate::tls::record::ciphers::cipher_suite;
@@ -16,7 +14,7 @@ use crate::tls::record::hello::ServerHelloDone;
 use crate::tls::record::hello::{extensions, ClientHello, ServerHello, SessionID};
 use crate::tls::record::key_exchange::rsa::PreMasterSecret;
 use crate::tls::record::protocol_version::ProtocolVersion;
-use crate::tls::record::{ClientKeyExchange, Handshake, HandshakeType, Random};
+use crate::tls::record::{ClientKeyExchange, Finished, Handshake, HandshakeType, Random};
 use crate::util::UintDisplay;
 use std::fs;
 use std::io::{Error, ErrorKind, Result, Write};
@@ -117,6 +115,16 @@ impl Connection {
                 ErrorKind::InvalidInput,
                 "Expected ClientKeyExchange",
             ))
+        }
+    }
+
+    fn read_finished(&mut self) -> Result<Finished> {
+        let handshake = self.read_handshake()?;
+
+        if let HandshakeType::Finished(f) = handshake.msg_type {
+            Ok(f)
+        } else {
+            Err(Error::new(ErrorKind::InvalidInput, "Expected Finished"))
         }
     }
 
@@ -263,6 +271,10 @@ impl Connection {
         // TODO: continue here
         self.read_change_cipher_spec()?;
         self.connection_states.activate_pending_read()?;
+
+        let finished = self.read_finished()?;
+
+        println!("{:?}", finished);
 
         Ok(())
     }

@@ -38,14 +38,24 @@ pub(crate) struct GenericBlockCipher {
 }
 
 impl GenericBlockCipher {
-    fn read(fragment: Vec<u8>, con_state: &ConnectionState) -> Result<Self> {
-        todo!()
+    fn read(mut fragment: Vec<u8>, con_state: &ConnectionState) -> Result<Self> {
+        let record_iv_length = *con_state.parameters.record_iv_length()? as usize;
+
+        let block_ciphered = fragment.split_off(record_iv_length);
+        let iv = fragment;
+
+        Ok(Self {
+            iv,
+            inner: BlockCiphered::new(block_ciphered)
+        })
     }
 }
 
 impl WritableToSink for GenericBlockCipher {
     fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
-        todo!()
+        buffer.extend_from_slice(self.iv.as_slice());
+        buffer.extend_from_slice(self.inner.bytes.as_slice());
+        Ok(())
     }
 }
 
