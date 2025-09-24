@@ -242,7 +242,7 @@ impl Connection {
         &mut self,
         client_key_exchange: ClientKeyExchange,
     ) -> Result<PreMasterSecret> {
-        let key_content = fs::read_to_string("private_key.pem")?;
+        let key_content = fs::read_to_string("key.pem")?;
         let key = PrivateKey::from_pem_content(key_content)
             .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
 
