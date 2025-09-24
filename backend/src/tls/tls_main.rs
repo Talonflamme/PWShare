@@ -6,7 +6,9 @@ use std::time::Duration;
 // TODO: eventually, we need to separate errors from IO and errors in the bytes supplied, in which
 //  case we would send back an Error. Actually, we might even send it regardless.
 fn handle_client(stream: TcpStream) -> Result<()> {
-    println!("Got stream from: {}", stream.peer_addr()?);
+    let addr = stream.peer_addr()?;
+
+    println!("Got stream from: {}", addr);
 
     stream.set_read_timeout(Some(Duration::from_secs(10)))?;
     stream.set_write_timeout(Some(Duration::from_secs(10)))?;
@@ -15,6 +17,7 @@ fn handle_client(stream: TcpStream) -> Result<()> {
 
     connection.start_handshake()?;
 
+    println!("Closing stream for: {}", addr);
     Ok(())
 }
 
