@@ -24,7 +24,12 @@ pub fn start_server() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:4981")?;
 
     for stream in listener.incoming() {
-        handle_client(stream?)?;
+        match stream {
+            Ok(stream) => {
+                std::thread::spawn(|| handle_client(stream).unwrap());
+            }
+            Err(e) => eprintln!("connection failed: {}", e),
+        }
     }
 
     Ok(())
