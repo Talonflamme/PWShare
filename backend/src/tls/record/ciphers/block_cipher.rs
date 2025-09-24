@@ -15,7 +15,7 @@ use rand::RngCore;
 use std::fmt::Debug;
 use std::io::{Error, ErrorKind, Result};
 
-pub trait TLSBlockCipher: Debug + TLSCipher {
+trait TLSBlockCipher: Debug + TLSCipher {
     fn encrypt_struct(
         &self,
         fragment: GenericBlockCipherInner,
@@ -26,7 +26,16 @@ pub trait TLSBlockCipher: Debug + TLSCipher {
         fragment: BlockCiphered<GenericBlockCipherInner>,
         con_state: &ConnectionState,
         iv: &[u8],
-    ) -> Result<GenericBlockCipherInner>;
+    ) -> Result<DecryptStructResult>;
+}
+
+/// We use a different struct as this result in order to prevent a timing attack based on
+/// invalid padding. This way, even when the padding is incorrect, operations like computing
+/// the MAC is still performed to have constant time. In that case, `padding_error` will be Some.
+struct DecryptStructResult {
+    inner: GenericBlockCipherInner,
+    /// `Some` if the padding was incorrect, `None` otherwise.
+    padding_error: Option<Error>,
 }
 
 #[derive(Debug)]
@@ -120,9 +129,13 @@ fn block_decrypt(
         ));
     };
 
-    // TODO: even when decrypting the struct due to wrong padding fails, the mac should
-    //  still be computed to prevent timing attacks
-    let inner = cipher.decrypt_struct(fragment.inner, con_state, &fragment.iv)?;
+    // even when padding is invalid, we still compute the mac and do all other
+    // operations to prevent a timing attack
+    let DecryptStructResult {
+        inner,
+        padding_error,
+    } = cipher.decrypt_struct(fragment.inner, con_state, &fragment.iv)?;
+
     let mac = inner.mac;
 
     let fragment_bytes: VariableLengthVec<u8, 0, 17408> = inner.content.into();
@@ -136,7 +149,9 @@ fn block_decrypt(
 
     let calculated_mac = tls_compressed.generate_mac(con_state)?;
 
-    if mac == calculated_mac {
+    if let Some(padding_error) = padding_error {
+        Err(padding_error)
+    } else if mac == calculated_mac {
         Ok(tls_compressed)
     } else {
         Err(Error::new(ErrorKind::Other, "MAC mismatch"))
@@ -186,7 +201,7 @@ impl TLSBlockCipher for TLSAesCbcCipher {
         fragment: BlockCiphered<GenericBlockCipherInner>,
         con_state: &ConnectionState,
         iv: &[u8],
-    ) -> Result<GenericBlockCipherInner> {
+    ) -> Result<DecryptStructResult> {
         let bytes = fragment.bytes;
         let mac_length = *con_state.parameters.mac_length()? as usize;
 
@@ -213,27 +228,48 @@ impl TLSBlockCipher for TLSAesCbcCipher {
             .into_iter()
             .flat_map(|x| x.to_be_bytes())
             .collect();
+
         let padding_length = bytes.pop().unwrap();
 
         if padding_length as usize > bytes.len() - mac_length {
-            return Err(Error::new(ErrorKind::Other, "invalid padding length"));
+            // assume 0 padding to prevent Timing Attack
+            return Ok(DecryptStructResult {
+                inner: GenericBlockCipherInner {
+                    content: bytes,
+                    mac: Vec::new(),     // field does not matter
+                    padding: Vec::new(), // assume 0 padding
+                    padding_length: 0,   // assume 0 padding
+                },
+                padding_error: Some(Error::new(ErrorKind::Other, "padding length")),
+            });
         }
 
         let padding = bytes.split_off(bytes.len() - padding_length as usize);
 
         // padding must all contain padding_length
         if padding.iter().any(|&p| p != padding_length) {
-            return Err(Error::new(ErrorKind::Other, "invalid padding"));
+            return Ok(DecryptStructResult {
+                inner: GenericBlockCipherInner {
+                    content: bytes,
+                    mac: Vec::new(),     // field does not matter
+                    padding: Vec::new(), // assume 0 padding
+                    padding_length: 0,   // assume 0 padding
+                },
+                padding_error: Some(Error::new(ErrorKind::Other, "padding length")),
+            });
         }
 
         let expected_mac = bytes.split_off(bytes.len() - mac_length);
         let content = bytes;
 
-        Ok(GenericBlockCipherInner {
-            content,
-            mac: expected_mac,
-            padding,
-            padding_length,
+        Ok(DecryptStructResult {
+            inner: GenericBlockCipherInner {
+                content,
+                mac: expected_mac,
+                padding,
+                padding_length,
+            },
+            padding_error: None,
         })
     }
 }
