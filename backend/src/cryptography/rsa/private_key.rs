@@ -1,3 +1,4 @@
+use crate::cryptography::rsa::modular_arithmetic::ModularArithmetic;
 use crate::cryptography::rsa::PublicKey;
 use num_bigint::BigUint;
 use std::fmt::{Debug, Display};
@@ -53,7 +54,7 @@ impl PrivateKey {
 
         q.set_bit(0, false); // subtract 1
         let exp2 = &d % &q;
-        p.set_bit(0, true);
+        q.set_bit(0, true);
 
         let inv = q.modinv(&p).unwrap();
 
@@ -66,7 +67,13 @@ impl PrivateKey {
                 reason: "ciphertext representative out of range",
             })
         } else {
-            Ok(message_cipher.modpow(&self.d, &self.n))
+            // m = c^d mod n
+            let m1 = message_cipher.modpow(&self.d_mod_p_minus_1, &self.p);
+            let m2 = message_cipher.modpow(&self.d_mod_q_minus_1, &self.q);
+
+            let h = (&m1).subm(&m2, &self.p).mulm(&self.inverse_q_mod_p, &self.p);
+            let m = (m2 + h * &self.q) % &self.n;
+            Ok(m)
         }
     }
 
