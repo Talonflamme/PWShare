@@ -585,7 +585,7 @@ impl PrivateKey {
             return Err("Expected EOF");
         }
 
-        Ok(Self::new(n, d, e, p, q))
+        Ok(Self::new_detailed(n, d, e, p, q, exp1, exp2, coeff))
     }
 }
 

@@ -9,6 +9,11 @@ pub struct PrivateKey {
     pub e: BigUint,
     pub p: BigUint,
     pub q: BigUint,
+    /// d mod (p - 1)
+    pub d_mod_p_minus_1: BigUint,
+    /// d mod (p - 1)
+    pub d_mod_q_minus_1: BigUint,
+    pub inverse_q_mod_p: BigUint,
 }
 
 #[derive(Debug)]
@@ -17,8 +22,42 @@ pub struct DecryptError {
 }
 
 impl PrivateKey {
-    pub fn new(n: BigUint, d: BigUint, e: BigUint, p: BigUint, q: BigUint) -> Self {
-        Self { n, d, e, p, q }
+    pub fn new_detailed(
+        n: BigUint,
+        d: BigUint,
+        e: BigUint,
+        p: BigUint,
+        q: BigUint,
+        d_mod_p_minus_1: BigUint,
+        d_mod_q_minus_1: BigUint,
+        inverse_q_mod_p: BigUint,
+    ) -> Self {
+        Self {
+            n,
+            d,
+            e,
+            p,
+            q,
+            d_mod_p_minus_1,
+            d_mod_q_minus_1,
+            inverse_q_mod_p,
+        }
+    }
+
+    pub fn new(n: BigUint, d: BigUint, e: BigUint, mut p: BigUint, mut q: BigUint) -> Self {
+        // since p and q are prime and hence odd, setting bit 0 to 0 effectively subtracts 1 from it
+        // this saves a clone
+        p.set_bit(0, false); // subtract 1
+        let exp1 = &d % &p;
+        p.set_bit(0, true);
+
+        q.set_bit(0, false); // subtract 1
+        let exp2 = &d % &q;
+        p.set_bit(0, true);
+
+        let inv = q.modinv(&p).unwrap();
+
+        Self::new_detailed(n, d, e, p, q, exp1, exp2, inv)
     }
 
     pub fn decrypt(&self, message_cipher: BigUint) -> Result<BigUint, DecryptError> {
