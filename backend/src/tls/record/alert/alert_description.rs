@@ -3,7 +3,7 @@ use pwshare_macros::{ReadableFromStream, WritableToSink};
 /// Description of an Alert layer of TLS.
 /// More info: https://www.rfc-editor.org/rfc/rfc5246.html#section-7.2.2
 #[repr(u8)]
-#[derive(ReadableFromStream, WritableToSink)]
+#[derive(ReadableFromStream, WritableToSink, Debug)]
 pub enum AlertDescription {
     /// Signals that the connection will be terminated. Both parties are required to send
     /// this before closing the connection. Upon receiving this, a CloseNotify must be sent.
