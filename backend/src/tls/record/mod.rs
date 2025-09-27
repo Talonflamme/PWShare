@@ -9,3 +9,4 @@ pub mod fragmentation;
 pub mod cryptographic_attributes;
 pub mod ciphers;
 pub mod change_cipher_spec;
+pub mod alert;
