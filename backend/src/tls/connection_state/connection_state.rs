@@ -1,9 +1,9 @@
 use crate::tls::connection_state::security_parameters::{
     BulkCipherAlgorithm, ConnectionEnd, SecurityParameters,
 };
+use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::ciphers::cipher::TLSCipher;
 use crate::tls::record::ciphers::{TLSAesCbcCipher, TLSNullCipher};
-use std::io::{Error, ErrorKind, Result};
 
 #[derive(Debug)]
 pub struct ConnectionState {
@@ -23,8 +23,8 @@ pub struct ConnectionState {
 fn get_cipher(cipher_type: BulkCipherAlgorithm, key: Vec<u8>) -> Result<Box<dyn TLSCipher>> {
     match cipher_type {
         BulkCipherAlgorithm::Null => Ok(Box::new(TLSNullCipher {})),
-        BulkCipherAlgorithm::Rc4 => Err(Error::new(ErrorKind::Other, "Not implemented")),
-        BulkCipherAlgorithm::TDes => Err(Error::new(ErrorKind::Other, "Not implemented")),
+        BulkCipherAlgorithm::Rc4 => Err(Alert::internal_error()), // not implemented, should not occur
+        BulkCipherAlgorithm::TDes => Err(Alert::internal_error()), // not implemented, should not occur
         BulkCipherAlgorithm::Aes => Ok(Box::new(TLSAesCbcCipher::new(key)?)),
     }
 }

@@ -1,8 +1,7 @@
+use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
-use std::any::type_name;
 use std::fmt::{Debug, Formatter};
-use std::io::{Error, ErrorKind, Result};
 use std::marker::PhantomData;
 
 pub struct PublicKeyEncrypted<T>
@@ -57,13 +56,7 @@ where
         let t = T::read(&mut iter)?;
 
         if iter.next().is_some() {
-            Err(Error::new(
-                ErrorKind::InvalidData,
-                format!(
-                    "Did not use up all bytes when decrypting to {}",
-                    type_name::<T>()
-                ),
-            ))
+            Err(Alert::decrypt_error()) // left over bytes
         } else {
             Ok(t)
         }

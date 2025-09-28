@@ -1,12 +1,13 @@
 use crate::tls::connection::Connection;
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::connection_state::security_parameters;
+use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::cryptographic_attributes::{BlockCiphered, StreamCiphered};
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::fragmentation::tls_plaintext::ContentType;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
-use std::io::{Error, ErrorKind, Read, Result};
+use std::io::Read;
 
 pub(crate) struct GenericStreamCipher {
     pub content: Vec<u8>,
@@ -46,7 +47,7 @@ impl GenericBlockCipher {
 
         Ok(Self {
             iv,
-            inner: BlockCiphered::new(block_ciphered)
+            inner: BlockCiphered::new(block_ciphered),
         })
     }
 }
@@ -128,7 +129,10 @@ impl TLSCiphertext {
     pub fn read_from_connection(connection: &mut Connection) -> Result<Self> {
         // Header contains 5 bytes
         let mut header_buf = [0u8; 5];
-        connection.stream.read_exact(&mut header_buf)?;
+        connection.stream.read_exact(&mut header_buf).map_err(|e| {
+            eprintln!("Failed reading bytes: {}", e);
+            Alert::internal_error()
+        })?;
 
         let mut iter = header_buf.into_iter();
 
@@ -138,14 +142,17 @@ impl TLSCiphertext {
 
         // length must not exceed 2^14 + 2048
         if length > 18432 {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!("TLSCiphertext must not exceed 2^14 + 2048: {}", length),
-            ));
+            return Err(Alert::record_overflow()); // message too large
         }
 
         let mut fragment_buf = vec![0; length as usize];
-        connection.stream.read_exact(fragment_buf.as_mut_slice())?;
+        connection
+            .stream
+            .read_exact(fragment_buf.as_mut_slice())
+            .map_err(|e| {
+                eprintln!("Failed reading bytes: {}", e);
+                Alert::internal_error()
+            })?;
 
         let current_read = &connection.connection_states.current_read;
 
@@ -178,13 +185,7 @@ impl TLSCiphertext {
         let length = frag_buffer.len();
 
         if length > 18432 {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                format!(
-                    "TLSCiphertext Length must not exceed 2^14 + 2048: {}",
-                    length
-                ),
-            ));
+            return Err(Alert::internal_error()); // length out of bounds
         }
 
         let length = length as u16;

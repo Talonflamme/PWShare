@@ -1,4 +1,5 @@
 use crate::tls::connection_state::connection_state::ConnectionState;
+use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::change_cipher_spec::ChangeCipherSpec;
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::protocol_version::ProtocolVersion;
@@ -7,7 +8,6 @@ use crate::tls::record::Handshake;
 use crate::tls::{ReadableFromStream, WritableToSink};
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Formatter};
-use std::io::{Error, ErrorKind, Result};
 
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq, ReadableFromStream, WritableToSink)]
@@ -84,7 +84,9 @@ impl TLSPlaintext {
         let mut iter = Into::<Vec<u8>>::into(self.fragment).into_iter();
 
         Ok(match self.content_type {
-            ContentType::ChangeCipherSpec => ContentTypeWithContent::ChangeCipherSpec(ChangeCipherSpec::read(&mut iter)?),
+            ContentType::ChangeCipherSpec => {
+                ContentTypeWithContent::ChangeCipherSpec(ChangeCipherSpec::read(&mut iter)?)
+            }
             ContentType::Alert => ContentTypeWithContent::Alert(),
             ContentType::Handshake => {
                 ContentTypeWithContent::Handshake(Handshake::read(&mut iter)?)
@@ -97,13 +99,7 @@ impl TLSPlaintext {
     /// is Handshake. Returns an `Err` otherwise.
     pub fn get_handshake(self) -> Result<Handshake> {
         if self.content_type != ContentType::Handshake {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                format!(
-                    "Tried to read handshake, but header is for: {:?}",
-                    self.content_type
-                ),
-            ));
+            return Err(Alert::unexpected_message()); // expected handshake, got something other
         }
 
         let frag: Vec<u8> = self.fragment.into();
@@ -112,7 +108,7 @@ impl TLSPlaintext {
         let handshake = Handshake::read(&mut iter)?;
 
         if iter.next().is_some() {
-            Err(Error::new(ErrorKind::InvalidData, "Too many bytes"))
+            Err(Alert::decode_error()) // too many bytes
         } else {
             Ok(handshake)
         }
@@ -122,10 +118,7 @@ impl TLSPlaintext {
     /// is `ChangeCipherSpec`. Returns an `Err` otherwise.
     pub fn get_change_cipher_spec(self) -> Result<ChangeCipherSpec> {
         if self.content_type != ContentType::ChangeCipherSpec {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                format!("ChangeCipherSpec expected, got: {:?}", self.content_type),
-            ));
+            return Err(Alert::unexpected_message()); // expected ChangeCipherSpec
         }
 
         let frag: Vec<u8> = self.fragment.into();
@@ -134,7 +127,7 @@ impl TLSPlaintext {
         let ccs = ChangeCipherSpec::read(&mut iter)?;
 
         if iter.next().is_some() {
-            Err(Error::new(ErrorKind::InvalidData, "Too many bytes"))
+            Err(Alert::decode_error())
         } else {
             Ok(ccs)
         }
@@ -143,9 +136,7 @@ impl TLSPlaintext {
     /// Compresses the Plaintext into a `TLSCompressed` given the connection state.
     /// This function does the opposite of `TLSCompressed.decompress()`.
     pub fn compress(self, con_state: &ConnectionState) -> Result<TLSCompressed> {
-        let compression = con_state
-            .parameters
-            .compression_algorithm()?;
+        let compression = con_state.parameters.compression_algorithm()?;
 
         Ok(TLSCompressed {
             content_type: self.content_type,

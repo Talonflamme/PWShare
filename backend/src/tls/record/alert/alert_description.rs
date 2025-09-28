@@ -91,8 +91,4 @@ pub enum AlertDescription {
     /// they did not put in the corresponding `ClientHello`.
     /// This message is always fatal.
     UnsupportedExtension = 110,
-
-    // TODO: remove
-    /// Only during development.
-    DevOnly = 255,
 }

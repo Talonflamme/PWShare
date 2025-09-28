@@ -50,7 +50,7 @@ pub fn impl_from_repr(ast: DeriveInput) -> TokenStream {
         impl TryFrom<#repr> for #name {
             type Error = String;
 
-            fn try_from(value: #repr) -> Result<Self, Self::Error> {
+            fn try_from(value: #repr) -> std::result::Result<Self, Self::Error> {
                 match value {
                     #(#variants),*,
                     _ => Err(format!("Cannot parse {} to {}", value, #name_str))

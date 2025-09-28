@@ -1,7 +1,7 @@
-use crate::tls::record::readable_from_stream::{unexpected_eof, ReadableFromStream};
+use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::readable_from_stream::ReadableFromStream;
 use crate::tls::{Sink, WritableToSink};
 use std::fmt::{Debug, Formatter};
-use std::io::{Error, ErrorKind};
 use std::ops::{Deref, DerefMut};
 
 /// A wrapper type for `Vec<T>`, that can be parsed using `ReadableFromStream`.
@@ -44,7 +44,7 @@ impl<T, const MIN: usize, const MAX: usize> ReadableFromStream for VariableLengt
 where
     T: ReadableFromStream,
 {
-    fn read(stream: &mut impl Iterator<Item = u8>) -> std::io::Result<Self> {
+    fn read(stream: &mut impl Iterator<Item = u8>) -> Result<Self> {
         let amount_bytes_for_len = (MAX as f64).log(256.0).ceil() as usize;
 
         let mut buf = [0; size_of::<usize>()];
@@ -52,19 +52,13 @@ where
         for i in 0..amount_bytes_for_len {
             // big-endian, but at the end of the buffer
             buf[size_of::<usize>() - amount_bytes_for_len + i] =
-                stream.next().ok_or(unexpected_eof!())?;
+                stream.next().ok_or_else(Alert::decode_error)?;
         }
 
         let length_in_bytes = usize::from_be_bytes(buf);
 
         if length_in_bytes < MIN || length_in_bytes > MAX {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                format!(
-                    "Length {} is outside of permitted range: {}..={}",
-                    length_in_bytes, MIN, MAX
-                ),
-            ));
+            return Err(Alert::illegal_parameter()); // out of range
         }
 
         // we can't really know beforehand, how many elements to allocate, because some
@@ -86,7 +80,7 @@ impl<T, const MIN: usize, const MAX: usize> WritableToSink for VariableLengthVec
 where
     T: WritableToSink,
 {
-    fn write(&self, buffer: &mut impl Sink<u8>) -> std::io::Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
         let amount_bytes_for_len = (MAX as f64).log(256.0).ceil() as usize;
 
         // we use a separate Vec<u8> here, because we need to verify that the length is in bounds
@@ -102,15 +96,7 @@ where
         let length = content_buf.len();
 
         if length < MIN || length > MAX {
-            Err(Error::new(
-                ErrorKind::InvalidData,
-                format!(
-                    "Length {} is outside of permitted range: {}..={}",
-                    content_buf.len(),
-                    MIN,
-                    MAX
-                ),
-            ))
+            Err(Alert::internal_error()) // length out of permitted range
         } else {
             let length = &length.to_be_bytes()[size_of::<usize>() - amount_bytes_for_len..];
 
@@ -145,12 +131,9 @@ impl<T, const MAX: usize> VariableLengthVec<T, 0, MAX> {
 }
 
 impl<const MIN: usize, const MAX: usize> VariableLengthVec<u8, MIN, MAX> {
-    pub fn check_bounds(&self) -> std::io::Result<()> {
+    pub fn check_bounds(&self) -> Result<()> {
         if self.len() < MIN || self.len() > MAX {
-            Err(Error::new(
-                ErrorKind::InvalidData,
-                format!("Length: {} out of bounds ({}..{})", self.len(), MIN, MAX),
-            ))
+            Err(Alert::illegal_parameter()) // out of range
         } else {
             Ok(())
         }
@@ -158,7 +141,7 @@ impl<const MIN: usize, const MAX: usize> VariableLengthVec<u8, MIN, MAX> {
 
     pub fn try_into<const NEW_MIN: usize, const NEW_MAX: usize>(
         self,
-    ) -> Result<VariableLengthVec<u8, NEW_MIN, NEW_MAX>, ()> {
+    ) -> std::result::Result<VariableLengthVec<u8, NEW_MIN, NEW_MAX>, ()> {
         if self.len() < NEW_MIN || self.len() > NEW_MAX {
             Err(())
         } else {
@@ -166,7 +149,7 @@ impl<const MIN: usize, const MAX: usize> VariableLengthVec<u8, MIN, MAX> {
         }
     }
 
-    pub fn try_from(vec: Vec<u8>) -> Result<Self, ()> {
+    pub fn try_from(vec: Vec<u8>) -> std::result::Result<Self, ()> {
         if vec.len() < MIN || vec.len() > MAX {
             Err(())
         } else {

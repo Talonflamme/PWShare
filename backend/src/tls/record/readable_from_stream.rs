@@ -1,16 +1,4 @@
-use std::io::Result;
-
-macro_rules! unexpected_eof {
-    () => {
-        std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected EOF")
-    };
-    ($msg: expr) => {
-        std::io::Error::new(std::io::ErrorKind::UnexpectedEof, $msg)
-    };
-    ($format: expr, $($arg:tt)*) => {
-        std::io::Error::new(std::io::ErrorKind::UnexpectedEof, format!($format, $($arg)*))
-    };
-}
+use crate::tls::record::alert::{Alert, Result};
 
 /// The type can be constructed from a stream of bytes.
 pub trait ReadableFromStream: Sized {
@@ -22,14 +10,14 @@ pub trait ReadableFromStream: Sized {
 
 impl ReadableFromStream for u8 {
     fn read(stream: &mut impl Iterator<Item = u8>) -> Result<Self> {
-        stream.next().ok_or(unexpected_eof!())
+        stream.next().ok_or_else(Alert::decode_error)
     }
 }
 
 impl ReadableFromStream for u16 {
     fn read(stream: &mut impl Iterator<Item = u8>) -> Result<Self> {
-        let b0 = stream.next().ok_or(unexpected_eof!())? as u16;
-        let b1 = stream.next().ok_or(unexpected_eof!())? as u16;
+        let b0 = stream.next().ok_or_else(Alert::decode_error)? as u16;
+        let b1 = stream.next().ok_or_else(Alert::decode_error)? as u16;
 
         Ok((b0 << 8) | b1)
     }
@@ -37,10 +25,10 @@ impl ReadableFromStream for u16 {
 
 impl ReadableFromStream for u32 {
     fn read(stream: &mut impl Iterator<Item = u8>) -> Result<Self> {
-        let b0 = stream.next().ok_or(unexpected_eof!())? as u32;
-        let b1 = stream.next().ok_or(unexpected_eof!())? as u32;
-        let b2 = stream.next().ok_or(unexpected_eof!())? as u32;
-        let b3 = stream.next().ok_or(unexpected_eof!())? as u32;
+        let b0 = stream.next().ok_or_else(Alert::decode_error)? as u32;
+        let b1 = stream.next().ok_or_else(Alert::decode_error)? as u32;
+        let b2 = stream.next().ok_or_else(Alert::decode_error)? as u32;
+        let b3 = stream.next().ok_or_else(Alert::decode_error)? as u32;
 
         Ok((b0 << 24) | (b1 << 16) | (b2 << 8) | b3)
     }
@@ -55,9 +43,7 @@ where
         for _ in 0..N {
             vec.push(T::read(stream)?);
         }
-        let arr: [T; N] = vec.try_into().map_err(|_| unexpected_eof!())?;
+        let arr: [T; N] = vec.try_into().map_err(|_| Alert::decode_error())?;
         Ok(arr)
     }
 }
-
-pub(crate) use unexpected_eof;

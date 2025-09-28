@@ -80,10 +80,7 @@ pub fn impl_readable_from_stream_trait(ast: DeriveInput) -> TokenStream {
                 let value: #repr = crate::tls::ReadableFromStream::read(stream)?;
                 match value {
                     #( #cases ),*,
-                    _ => Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("Expected any valid value for {}, got: {}", #lit_name, value)
-                    )),
+                    _ => Err(crate::tls::record::alert::Alert::decode_error()),
                 }
             }
         }
@@ -100,7 +97,7 @@ pub fn impl_readable_from_stream_trait(ast: DeriveInput) -> TokenStream {
 
     quote! {
         impl #generics crate::tls::ReadableFromStream for #name #generics #generics_where {
-            fn read(stream: &mut impl Iterator<Item=u8>) -> std::io::Result<Self> {
+            fn read(stream: &mut impl Iterator<Item=u8>) -> crate::tls::record::alert::Result<Self> {
                 #body
             }
         }

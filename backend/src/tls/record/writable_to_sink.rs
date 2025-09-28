@@ -1,4 +1,4 @@
-use std::io::Result;
+use crate::tls::record::alert::Result;
 
 pub trait Sink<T> {
     fn push(&mut self, byte: T);

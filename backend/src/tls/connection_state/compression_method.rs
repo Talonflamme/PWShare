@@ -1,6 +1,6 @@
+use crate::tls::record::alert::Result;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
-use std::io::Result;
 
 #[repr(u8)]
 #[derive(PartialEq, Eq, Debug, ReadableFromStream, WritableToSink, Copy, Clone)]

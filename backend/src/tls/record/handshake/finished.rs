@@ -1,9 +1,9 @@
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::connection_state::security_parameters::ConnectionEnd;
+use crate::tls::record::alert::{Alert, Result};
 use crate::util::UintDisplay;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Formatter};
-use std::io::{Error, ErrorKind, Result};
 
 const VERIFY_DATA_LENGTH: usize = 12;
 
@@ -62,7 +62,7 @@ impl Finished {
         if self.verify_data == data {
             Ok(())
         } else {
-            Err(Error::new(ErrorKind::Other, "Verifying data failed"))
+            Err(Alert::decrypt_error()) // failed to verify
         }
     }
 }

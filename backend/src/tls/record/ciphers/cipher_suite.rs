@@ -3,6 +3,7 @@ use crate::tls::connection_state::prf::PRFAlgorithm;
 use crate::tls::connection_state::security_parameters::{
     BulkCipherAlgorithm, CipherType, SecurityParameters,
 };
+use crate::tls::record::alert::{Alert, Result};
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use pwshare_macros::{FromRepr, IntoRepr};
 
@@ -58,7 +59,7 @@ pub enum CipherSuite {
 }
 
 impl ReadableFromStream for CipherSuite {
-    fn read(stream: &mut impl Iterator<Item = u8>) -> std::io::Result<Self> {
+    fn read(stream: &mut impl Iterator<Item = u8>) -> Result<Self> {
         let u = u16::read(stream)?;
 
         Ok(Self::try_from(u).unwrap_or(Self::Unknown))
@@ -66,12 +67,9 @@ impl ReadableFromStream for CipherSuite {
 }
 
 impl WritableToSink for CipherSuite {
-    fn write(&self, buffer: &mut impl Sink<u8>) -> std::io::Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
         if matches!(self, CipherSuite::Unknown) {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Cannot write {:?}", self),
-            ));
+            return Err(Alert::internal_error()); // cannot write, should not occur
         }
 
         let v: u16 = self.into();
@@ -202,7 +200,7 @@ impl CipherSuite {
                     cipher = Null,
                     mac = Null
                 );
-            },
+            }
 
             CipherSuite::TlsRsaWithNullMd5 => {
                 define_suite!(
@@ -383,21 +381,15 @@ const SUPPORTED_CIPHER_SUITES: [CipherSuite; 4] = [
     CipherSuite::TlsRsaWithAes128CbcSha,
 ];
 
-#[derive(Debug)]
-/// Error type for when the client and our server do not share any common `CipherSuite`s.
-pub struct NoAcceptableMatch;
-
 /// Our server enforces our own preference since we deal with sharing passwords. This function
 /// selects the best `CipherSuite` that are present in `SUPPORTED_CIPHER_SUITES` and in the
 /// `cipher_suites_from_client`.
-pub fn select_cipher_suite(
-    cipher_suites_from_client: &Vec<CipherSuite>,
-) -> Result<CipherSuite, NoAcceptableMatch> {
+pub fn select_cipher_suite(cipher_suites_from_client: &Vec<CipherSuite>) -> Result<CipherSuite> {
     for cipher in SUPPORTED_CIPHER_SUITES.iter() {
         if cipher_suites_from_client.contains(cipher) {
             return Ok(*cipher);
         }
     }
 
-    Err(NoAcceptableMatch)
+    Err(Alert::insufficient_security())
 }

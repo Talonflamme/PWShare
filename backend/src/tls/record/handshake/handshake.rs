@@ -8,7 +8,7 @@ use crate::tls::record::writable_to_sink::{Sink, WritableToSink};
 use crate::tls::ReadableFromStream;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::Debug;
-use std::io::{Error, ErrorKind, Result};
+use crate::tls::record::alert::{Alert, Result};
 
 #[repr(u8)]
 #[derive(Debug, ReadableFromStream, WritableToSink)]
@@ -108,13 +108,7 @@ impl WritableToSink for Handshake {
         buffer.push(typ);
 
         if body_buffer.len() >= (1 << 24) {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                format!(
-                    "Length is too large: {}, only 24 bytes allowed.",
-                    body_buffer.len()
-                ),
-            ));
+            return Err(Alert::internal_error()); // length too large, should not occur
         }
 
         let len_bytes_be = body_buffer.len().to_be_bytes();

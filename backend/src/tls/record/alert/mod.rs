@@ -1,3 +1,6 @@
 pub mod alert_level;
 pub mod alert_description;
-pub mod alert;
+mod alert;
+
+pub type Result<T> = core::result::Result<T, Alert>;
+pub use alert::Alert;

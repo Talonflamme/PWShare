@@ -4,6 +4,7 @@ use crate::cryptography::rsa::PrivateKey;
 use crate::tls::connection_state::compression_method::CompressionMethod;
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::connection_state::security_parameters::{ConnectionEnd, SecurityParameters};
+use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::certificate::{ASN1Cert, Certificate};
 use crate::tls::record::change_cipher_spec::ChangeCipherSpec;
 use crate::tls::record::ciphers::cipher_suite;
@@ -16,7 +17,7 @@ use crate::tls::record::key_exchange::rsa::PreMasterSecret;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::{ClientKeyExchange, Finished, Handshake, HandshakeType, Random};
 use std::fs;
-use std::io::{Error, ErrorKind, Result, Write};
+use std::io::Write;
 use std::net::TcpStream;
 
 pub(crate) struct ConnectionStates {
@@ -108,7 +109,7 @@ impl Connection {
         if let HandshakeType::ClientHello(ch) = handshake.msg_type {
             Ok((ch, bytes))
         } else {
-            Err(Error::new(ErrorKind::InvalidInput, "Expected ClientHello"))
+            Err(Alert::unexpected_message())
         }
     }
 
@@ -118,10 +119,7 @@ impl Connection {
         if let HandshakeType::ClientKeyExchange(cke) = handshake.msg_type {
             Ok((cke, bytes))
         } else {
-            Err(Error::new(
-                ErrorKind::InvalidInput,
-                "Expected ClientKeyExchange",
-            ))
+            Err(Alert::unexpected_message())
         }
     }
 
@@ -131,12 +129,12 @@ impl Connection {
         if let HandshakeType::Finished(f) = handshake.msg_type {
             Ok((f, bytes))
         } else {
-            Err(Error::new(ErrorKind::InvalidInput, "Expected Finished"))
+            Err(Alert::unexpected_message())
         }
     }
 
     fn send_server_hello(&mut self, client_hello: &ClientHello) -> Result<Vec<u8>> {
-        let cipher_suite = cipher_suite::select_cipher_suite(&client_hello.cipher_suites).unwrap();
+        let cipher_suite = cipher_suite::select_cipher_suite(&client_hello.cipher_suites)?;
         let mut extensions = extensions::filter_extensions(&client_hello.extensions);
 
         cipher_suite.set_security_params(&mut self.connection_states.pending_parameters);
@@ -171,7 +169,10 @@ impl Connection {
     }
 
     fn send_certificate(&mut self) -> Result<Vec<u8>> {
-        let asn1cert = ASN1Cert::from_file("cert.pem")?;
+        let asn1cert = ASN1Cert::from_file("cert.pem").map_err(|e| {
+            eprintln!("Failed reading certificate file: {}", e);
+            Alert::internal_error()
+        })?;
 
         let certificate = Certificate {
             certificate_list: vec![asn1cert].into(),
@@ -233,7 +234,10 @@ impl Connection {
         let mut bytes: Vec<u8> = Vec::new();
         tls_ciphertext.write(&mut bytes)?;
 
-        self.stream.write_all(bytes.as_slice())?;
+        self.stream.write_all(bytes.as_slice()).map_err(|e| {
+            eprintln!("Failed writing bytes: {}", e);
+            Alert::internal_error()
+        })?;
 
         Ok(handshake_bytes)
     }
@@ -242,21 +246,25 @@ impl Connection {
         &mut self,
         client_key_exchange: ClientKeyExchange,
     ) -> Result<PreMasterSecret> {
-        let key_content = fs::read_to_string("key.pem")?;
-        let key = PrivateKey::from_pem_content(key_content)
-            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
+        let key_content = fs::read_to_string("key.pem").map_err(|e| {
+            eprintln!("Error reading key file: {}", e);
+            Alert::internal_error()
+        })?;
+        let key = PrivateKey::from_pem_content(key_content).map_err(|e| {
+            eprintln!("Error parsing .pem file: {}", e);
+            Alert::internal_error()
+        })?;
 
         client_key_exchange
             .exchange_keys
             .pre_master_secret
             .decrypt(move |bytes| {
-                let padded = key.decrypt_bytes(bytes.as_slice()).map_err(|e| {
-                    Error::new(ErrorKind::Other, format!("Decryption failed: {:?}", e))
-                })?;
+                let padded = key
+                    .decrypt_bytes(bytes.as_slice())
+                    .map_err(|_| Alert::decrypt_error())?;
 
-                let message = pkcs1_v1_5::unpad(&padded, key.size_in_bytes()).map_err(|e| {
-                    Error::new(ErrorKind::Other, format!("Unpadding failed: {:?}", e))
-                })?;
+                let message = pkcs1_v1_5::unpad(&padded, key.size_in_bytes())
+                    .map_err(|_| Alert::decrypt_error())?;
 
                 Ok(message)
             })
@@ -275,10 +283,7 @@ impl Connection {
             Ok(pre_master_secret
                 .convert_to_master(prf_func, &self.connection_states.pending_parameters))
         } else {
-            Err(Error::new(
-                ErrorKind::Other,
-                "Handshake failed. No PRF negotiated",
-            ))
+            Err(Alert::handshake_failure()) // no PRF negotiated yet
         }
     }
 

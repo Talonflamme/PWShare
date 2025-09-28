@@ -105,7 +105,7 @@ pub fn impl_writable_to_sink(ast: DeriveInput) -> TokenStream {
 
     quote! {
         impl #generics crate::tls::WritableToSink for #name #generics #generics_where {
-            fn write(&self, buffer: &mut impl crate::tls::Sink<u8>) -> std::io::Result<()> {
+            fn write(&self, buffer: &mut impl crate::tls::Sink<u8>) -> crate::tls::record::alert::Result<()> {
                 #body
             }
         }

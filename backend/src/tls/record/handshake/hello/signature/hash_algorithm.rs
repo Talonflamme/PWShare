@@ -1,3 +1,4 @@
+use crate::tls::record::alert::{Alert, Result};
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use pwshare_macros::{FromRepr, IntoRepr};
 
@@ -15,7 +16,7 @@ pub enum HashAlgorithm {
 }
 
 impl ReadableFromStream for HashAlgorithm {
-    fn read(stream: &mut impl Iterator<Item = u8>) -> std::io::Result<Self> {
+    fn read(stream: &mut impl Iterator<Item = u8>) -> Result<Self> {
         let u = u8::read(stream)?;
 
         Ok(Self::try_from(u).unwrap_or(Self::Unknown))
@@ -23,12 +24,9 @@ impl ReadableFromStream for HashAlgorithm {
 }
 
 impl WritableToSink for HashAlgorithm {
-    fn write(&self, buffer: &mut impl Sink<u8>) -> std::io::Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
         if matches!(self, Self::Unknown) {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Cannot write {:?}", self)
-            ))
+            Err(Alert::internal_error()) // cannot write Unknown, should never come here
         } else {
             let u: u8 = self.into();
             u.write(buffer)

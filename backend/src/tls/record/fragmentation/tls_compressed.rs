@@ -1,11 +1,11 @@
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::connection_state::mac::MACAlgorithm;
+use crate::tls::record::alert::Result;
 use crate::tls::record::fragmentation::tls_ciphertext::{self, TLSCiphertext};
 use crate::tls::record::fragmentation::tls_plaintext::{ContentType, TLSPlaintext};
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use crate::tls::WritableToSink;
-use std::io::Result;
 
 pub struct TLSCompressed {
     pub(crate) content_type: ContentType,
@@ -17,9 +17,7 @@ impl TLSCompressed {
     /// Decompressed this `TLSCompressed` into a `TLSPlaintext`. This function
     /// does the opposite of `TLSPlaintext.compress()`.
     pub fn decompress(self, con_state: &ConnectionState) -> Result<TLSPlaintext> {
-        let compression = con_state
-            .parameters
-            .compression_algorithm()?;
+        let compression = con_state.parameters.compression_algorithm()?;
 
         Ok(TLSPlaintext {
             content_type: self.content_type,
@@ -34,9 +32,7 @@ impl TLSCompressed {
     }
 
     pub fn generate_mac(&self, con_state: &ConnectionState) -> Result<Vec<u8>> {
-        let mac_alg = con_state
-            .parameters
-            .mac_algorithm()?;
+        let mac_alg = con_state.parameters.mac_algorithm()?;
 
         if matches!(mac_alg, MACAlgorithm::Null) {
             return Ok(Vec::new());

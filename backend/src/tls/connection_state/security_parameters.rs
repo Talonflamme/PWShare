@@ -1,6 +1,7 @@
 use super::mac::MACAlgorithm;
 use super::prf::PRFAlgorithm;
 use crate::tls::connection_state::compression_method::CompressionMethod;
+use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::ciphers::cipher_suite::CipherSuite;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -28,12 +29,9 @@ macro_rules! impl_getters {
     ($struct: ident, { $($field: ident : $ty:ty),* $(,)? }) => {
         impl $struct {
             $(
-                pub fn $field (&self) -> std::io::Result<&$ty> {
+                pub fn $field (&self) -> Result<&$ty> {
                     self.$field.as_ref().ok_or(
-                        std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            concat!(stringify!($field), " must not be None")
-                        )
+                        Alert::internal_error() // must be set by now
                     )
                 }
             )*

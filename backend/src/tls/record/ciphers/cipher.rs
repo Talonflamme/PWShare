@@ -1,8 +1,8 @@
 use crate::tls::connection_state::connection_state::ConnectionState;
+use crate::tls::record::alert::Result;
 use crate::tls::record::fragmentation::tls_ciphertext::TLSCiphertext;
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use std::fmt::Debug;
-use std::io::Result;
 
 pub trait TLSCipher: Debug {
     fn encrypt(

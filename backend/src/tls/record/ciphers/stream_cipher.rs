@@ -1,4 +1,5 @@
 use crate::tls::connection_state::connection_state::ConnectionState;
+use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::ciphers::cipher::TLSCipher;
 use crate::tls::record::cryptographic_attributes::StreamCiphered;
 use crate::tls::record::fragmentation::tls_ciphertext::{
@@ -7,7 +8,6 @@ use crate::tls::record::fragmentation::tls_ciphertext::{
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use std::fmt::Debug;
-use std::io::{Error, ErrorKind};
 
 #[derive(Debug)]
 pub struct TLSNullCipher;
@@ -16,7 +16,7 @@ impl TLSNullCipher {
     fn encrypt_struct(
         &self,
         fragment: GenericStreamCipher,
-    ) -> std::io::Result<StreamCiphered<GenericStreamCipher>> {
+    ) -> Result<StreamCiphered<GenericStreamCipher>> {
         // no encryption
         Ok(StreamCiphered::new(fragment.to_bytes()))
     }
@@ -25,7 +25,7 @@ impl TLSNullCipher {
         &self,
         fragment: StreamCiphered<GenericStreamCipher>,
         con_state: &ConnectionState,
-    ) -> std::io::Result<GenericStreamCipher> {
+    ) -> Result<GenericStreamCipher> {
         GenericStreamCipher::read(fragment.bytes, con_state)
     }
 }
@@ -35,7 +35,7 @@ impl TLSCipher for TLSNullCipher {
         &self,
         plaintext: TLSCompressed,
         con_state: &ConnectionState,
-    ) -> std::io::Result<TLSCiphertext> {
+    ) -> Result<TLSCiphertext> {
         let mac = plaintext.generate_mac(con_state)?;
 
         let generic_stream_cipher = GenericStreamCipher {
@@ -54,15 +54,11 @@ impl TLSCipher for TLSNullCipher {
         &self,
         ciphertext: TLSCiphertext,
         con_state: &ConnectionState,
-    ) -> std::io::Result<TLSCompressed> {
-        let frag =
-            match ciphertext.fragment {
-                CipherType::Stream(s) => s,
-                _ => return Err(Error::new(
-                    ErrorKind::InvalidInput,
-                    "Called TLSStreamCipher.decrypt on something that is not StreamCipherEncrypted",
-                )),
-            };
+    ) -> Result<TLSCompressed> {
+        let frag = match ciphertext.fragment {
+            CipherType::Stream(s) => s,
+            _ => return Err(Alert::internal_error()), // called TLSStreamCipher.decrypt on something other than StreamCiphered
+        };
 
         let generic_stream_cipher = self.decrypt_struct(frag, con_state)?;
         let mac = generic_stream_cipher.mac.clone();
@@ -81,7 +77,7 @@ impl TLSCipher for TLSNullCipher {
         if generated_mac == mac {
             Ok(compressed)
         } else {
-            Err(Error::new(ErrorKind::Other, "MAC mismatch"))
+            Err(Alert::bad_record_mac())
         }
     }
 }
