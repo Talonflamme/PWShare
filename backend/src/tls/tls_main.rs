@@ -38,7 +38,10 @@ fn handle_client(stream: TcpStream) -> Result<(), IOErrorOrTLSError> {
 
     if let Err(err) = connection.start_handshake() {
         match err {
-            IOErrorOrTLSError::TLSError(alert) => connection.send_alert(alert)?,
+            IOErrorOrTLSError::TLSError(alert) => {
+                eprintln!("Alert: {:?}", alert);
+                connection.send_alert(alert)?
+            }
             IOErrorOrTLSError::IOError(io_err) => eprintln!("IO Error: {}", io_err),
         }
     }

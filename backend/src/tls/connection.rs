@@ -98,9 +98,7 @@ impl Connection {
     }
 
     fn read_change_cipher_spec(&mut self) -> Result<ChangeCipherSpec> {
-        let ciphertext = TLSCiphertext::read_from_connection(self)?;
-        let compressed = ciphertext.decrypt(&self.connection_states.current_read)?;
-        let plaintext = compressed.decompress(&self.connection_states.current_read)?;
+        let plaintext = self.read_fragment()?;
 
         let ccs = plaintext.get_change_cipher_spec()?;
         Ok(ccs)
@@ -109,12 +107,9 @@ impl Connection {
     /// Returns the parsed Handshake and the bytes of the handshake message as a raw
     /// `Vec<u8>`.
     fn read_handshake(&mut self) -> Result<(Handshake, Vec<u8>)> {
-        let ciphertext = TLSCiphertext::read_from_connection(self)?;
-        let compressed = ciphertext.decrypt(&self.connection_states.current_read)?;
-        let plaintext = compressed.decompress(&self.connection_states.current_read)?;
+        let plaintext = self.read_fragment()?;
 
         let bytes = plaintext.fragment.clone();
-
         let handshake = plaintext.get_handshake()?;
 
         Ok((handshake, bytes))
@@ -238,6 +233,17 @@ impl Connection {
         self.send_fragment(ContentTypeWithContent::Handshake(handshake))
     }
 
+    fn read_fragment(&mut self) -> Result<TLSPlaintext> {
+        let ciphertext = TLSCiphertext::read_from_connection(self)?;
+        let compressed = ciphertext.decrypt(&self.connection_states.current_read)?;
+        let plaintext = compressed.decompress(&self.connection_states.current_read)?;
+
+        // increment sequence number of read state
+        self.connection_states.current_read.sequence_number += 1;
+
+        Ok(plaintext)
+    }
+
     /// Sends the `content`, adds a header and encrypts the message. Returns the bytes of the
     /// handshake message (without header).
     fn send_fragment(&mut self, content: ContentTypeWithContent) -> Result<Vec<u8>> {
@@ -255,6 +261,9 @@ impl Connection {
             eprintln!("Failed writing bytes: {}", e);
             Alert::internal_error()
         })?;
+
+        // increment sequence number of write state
+        self.connection_states.current_write.sequence_number += 1;
 
         Ok(handshake_bytes)
     }
@@ -366,13 +375,17 @@ impl Connection {
 
     /// Sends application data to the client. Fails if the session is not yet initialized.
     pub fn send_app_data(&mut self, data: Vec<u8>) -> std::result::Result<(), IOErrorOrTLSError> {
+        if self.is_closed {
+            return connection_closed_already!();
+        }
+
         if !self.is_handshake_done {
             return Err(IOErrorOrTLSError::IOError(Error::new(
                 ErrorKind::Other,
                 "Cannot send application data when no handshake was done.",
             )));
         }
-        
+
         self.send_fragment(ContentTypeWithContent::ApplicationData(data))?;
 
         Ok(())
