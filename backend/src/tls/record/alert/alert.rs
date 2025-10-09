@@ -9,6 +9,10 @@ pub struct Alert {
 }
 
 impl Alert {
+    pub fn is_fatal(&self) -> bool {
+        self.level == AlertLevel::Fatal
+    }
+    
     #[inline]
     pub fn close_notify() -> Self {
         Self {

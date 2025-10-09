@@ -16,8 +16,9 @@ use crate::tls::record::hello::{extensions, ClientHello, ServerHello, SessionID}
 use crate::tls::record::key_exchange::rsa::PreMasterSecret;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::{ClientKeyExchange, Finished, Handshake, HandshakeType, Random};
+use crate::tls::tls_main::IOErrorOrTLSError;
 use std::fs;
-use std::io::Write;
+use std::io::{Error, ErrorKind, Write};
 use std::net::TcpStream;
 
 pub(crate) struct ConnectionStates {
@@ -26,6 +27,15 @@ pub(crate) struct ConnectionStates {
     /// The security parameters of the pending write/read states. The `entity` field must
     /// be newly assigned when the pending states become the current states.
     pub(crate) pending_parameters: SecurityParameters,
+}
+
+macro_rules! connection_closed_already {
+    () => {
+        Err(IOErrorOrTLSError::IOError(Error::new(
+            ErrorKind::ConnectionAborted,
+            "Connection is already closed",
+        )))
+    };
 }
 
 impl ConnectionStates {
@@ -63,6 +73,9 @@ pub struct Connection {
     /// All handshake messages concatenated. This does not include HelloRequest and the next message
     /// (Finished) but all others in order.
     handshake_messages: Vec<u8>,
+    /// A bool that defaults to `false`. If true, any operations that read or write
+    /// from or to `stream` fail.
+    is_closed: bool,
 }
 
 impl Connection {
@@ -77,6 +90,7 @@ impl Connection {
             stream,
             connection_states: states,
             handshake_messages: Vec::new(),
+            is_closed: false,
         }
     }
 
@@ -287,7 +301,11 @@ impl Connection {
         }
     }
 
-    pub fn start_handshake(&mut self) -> Result<()> {
+    pub fn start_handshake(&mut self) -> std::result::Result<(), IOErrorOrTLSError> {
+        if self.is_closed {
+            return connection_closed_already!();
+        }
+
         let (client_hello, mut client_hello_bytes) = self.read_client_hello()?;
         self.handshake_messages.append(&mut client_hello_bytes);
 
@@ -326,11 +344,18 @@ impl Connection {
     }
 
     /// Sends an alert to the connection, returning any Errors.
-    pub fn send_alert(&mut self, alert: Alert) -> Result<()> {
-        // TODO: set connection to closed or something, so that
-        //  it cannot be used after sending a fatal Alert
+    pub fn send_alert(&mut self, alert: Alert) -> std::result::Result<(), IOErrorOrTLSError> {
+        if self.is_closed {
+            return connection_closed_already!();
+        }
+
+        let is_fatal = alert.is_fatal();
 
         self.send_fragment(ContentTypeWithContent::Alert(alert))?;
+
+        if is_fatal {
+            self.is_closed = true;
+        }
 
         Ok(())
     }

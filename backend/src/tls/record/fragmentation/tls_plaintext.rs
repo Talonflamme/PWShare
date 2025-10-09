@@ -66,6 +66,7 @@ impl TLSPlaintext {
         match content {
             ContentTypeWithContent::Handshake(h) => h.write(&mut bytes)?,
             ContentTypeWithContent::ChangeCipherSpec(c) => c.write(&mut bytes)?,
+            ContentTypeWithContent::Alert(a) => a.write(&mut bytes)?,
             _ => todo!(),
         };
 
