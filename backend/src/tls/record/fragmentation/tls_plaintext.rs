@@ -134,6 +134,16 @@ impl TLSPlaintext {
         }
     }
 
+    /// Returns the Application Data as a `Vec<u8>` if `self.content_type` is `ApplicationData`.
+    /// Returns an `Err` otherwise.
+    pub fn get_application_data(self) -> Result<Vec<u8>> {
+        if self.content_type != ContentType::ApplicationData {
+            return Err(Alert::unexpected_message()); // expected ApplicationData
+        }
+
+        Ok(self.fragment.into())
+    }
+
     /// Compresses the Plaintext into a `TLSCompressed` given the connection state.
     /// This function does the opposite of `TLSCompressed.decompress()`.
     pub fn compress(self, con_state: &ConnectionState) -> Result<TLSCompressed> {

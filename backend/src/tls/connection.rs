@@ -38,6 +38,15 @@ macro_rules! connection_closed_already {
     };
 }
 
+macro_rules! handshake_not_done {
+    () => {
+        Err(IOErrorOrTLSError::IOError(Error::new(
+            ErrorKind::Other,
+            "Cannot send application data when no handshake was done.",
+        )))
+    }
+}
+
 impl ConnectionStates {
     fn activate_pending(&mut self, entity: ConnectionEnd) -> Result<ConnectionState> {
         let mut param = self.pending_parameters.clone();
@@ -380,14 +389,26 @@ impl Connection {
         }
 
         if !self.is_handshake_done {
-            return Err(IOErrorOrTLSError::IOError(Error::new(
-                ErrorKind::Other,
-                "Cannot send application data when no handshake was done.",
-            )));
+            return handshake_not_done!();
         }
 
         self.send_fragment(ContentTypeWithContent::ApplicationData(data))?;
 
         Ok(())
+    }
+
+    pub fn receive_app_data(&mut self) -> std::result::Result<Vec<u8>, IOErrorOrTLSError> {
+        if self.is_closed {
+            return connection_closed_already!();
+        }
+
+        if !self.is_handshake_done {
+            return handshake_not_done!();
+        }
+
+        let plain = self.read_fragment()?;
+        let app_data = plain.get_application_data()?;
+
+        Ok(app_data)
     }
 }
