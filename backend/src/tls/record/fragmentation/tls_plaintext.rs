@@ -22,7 +22,7 @@ pub enum ContentTypeWithContent {
     ChangeCipherSpec(ChangeCipherSpec),
     Alert(Alert),
     Handshake(Handshake),
-    ApplicationData(),
+    ApplicationData(Vec<u8>),
 }
 
 impl Into<ContentType> for &ContentTypeWithContent {
@@ -31,7 +31,7 @@ impl Into<ContentType> for &ContentTypeWithContent {
             ContentTypeWithContent::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
             ContentTypeWithContent::Alert(_) => ContentType::Alert,
             ContentTypeWithContent::Handshake(_) => ContentType::Handshake,
-            ContentTypeWithContent::ApplicationData() => ContentType::ApplicationData,
+            ContentTypeWithContent::ApplicationData(_) => ContentType::ApplicationData,
         }
     }
 }
@@ -67,7 +67,7 @@ impl TLSPlaintext {
             ContentTypeWithContent::Handshake(h) => h.write(&mut bytes)?,
             ContentTypeWithContent::ChangeCipherSpec(c) => c.write(&mut bytes)?,
             ContentTypeWithContent::Alert(a) => a.write(&mut bytes)?,
-            _ => todo!(),
+            ContentTypeWithContent::ApplicationData(mut b) => bytes.append(&mut b),
         };
 
         let fragment: VariableLengthVec<u8, 0, 16384> = bytes.into();
@@ -92,7 +92,7 @@ impl TLSPlaintext {
             ContentType::Handshake => {
                 ContentTypeWithContent::Handshake(Handshake::read(&mut iter)?)
             }
-            ContentType::ApplicationData => ContentTypeWithContent::ApplicationData(),
+            ContentType::ApplicationData => ContentTypeWithContent::ApplicationData(iter.collect()),
         })
     }
 

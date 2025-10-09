@@ -43,6 +43,8 @@ fn handle_client(stream: TcpStream) -> Result<(), IOErrorOrTLSError> {
         }
     }
 
+    connection.send_app_data(b"Hello World!".to_vec())?;
+
     println!("Closing stream for: {}", addr);
     Ok(())
 }

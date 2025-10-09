@@ -76,6 +76,8 @@ pub struct Connection {
     /// A bool that defaults to `false`. If true, any operations that read or write
     /// from or to `stream` fail.
     is_closed: bool,
+    /// A bool indicating if a handshake was successfully performed. Defaults to `false`.
+    is_handshake_done: bool,
 }
 
 impl Connection {
@@ -91,6 +93,7 @@ impl Connection {
             connection_states: states,
             handshake_messages: Vec::new(),
             is_closed: false,
+            is_handshake_done: true,
         }
     }
 
@@ -340,6 +343,7 @@ impl Connection {
 
         self.send_finished()?;
 
+        self.is_handshake_done = true;
         Ok(())
     }
 
@@ -356,6 +360,20 @@ impl Connection {
         if is_fatal {
             self.is_closed = true;
         }
+
+        Ok(())
+    }
+
+    /// Sends application data to the client. Fails if the session is not yet initialized.
+    pub fn send_app_data(&mut self, data: Vec<u8>) -> std::result::Result<(), IOErrorOrTLSError> {
+        if !self.is_handshake_done {
+            return Err(IOErrorOrTLSError::IOError(Error::new(
+                ErrorKind::Other,
+                "Cannot send application data when no handshake was done.",
+            )));
+        }
+        
+        self.send_fragment(ContentTypeWithContent::ApplicationData(data))?;
 
         Ok(())
     }
