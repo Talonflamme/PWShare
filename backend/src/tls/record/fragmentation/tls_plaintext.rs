@@ -20,7 +20,7 @@ pub enum ContentType {
 
 pub enum ContentTypeWithContent {
     ChangeCipherSpec(ChangeCipherSpec),
-    Alert(),
+    Alert(Alert),
     Handshake(Handshake),
     ApplicationData(),
 }
@@ -29,7 +29,7 @@ impl Into<ContentType> for &ContentTypeWithContent {
     fn into(self) -> ContentType {
         match self {
             ContentTypeWithContent::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
-            ContentTypeWithContent::Alert() => ContentType::Alert,
+            ContentTypeWithContent::Alert(_) => ContentType::Alert,
             ContentTypeWithContent::Handshake(_) => ContentType::Handshake,
             ContentTypeWithContent::ApplicationData() => ContentType::ApplicationData,
         }
@@ -87,7 +87,7 @@ impl TLSPlaintext {
             ContentType::ChangeCipherSpec => {
                 ContentTypeWithContent::ChangeCipherSpec(ChangeCipherSpec::read(&mut iter)?)
             }
-            ContentType::Alert => ContentTypeWithContent::Alert(),
+            ContentType::Alert => ContentTypeWithContent::Alert(Alert::read(&mut iter)?),
             ContentType::Handshake => {
                 ContentTypeWithContent::Handshake(Handshake::read(&mut iter)?)
             }

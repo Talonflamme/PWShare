@@ -36,7 +36,9 @@ fn handle_client(stream: TcpStream) -> Result<(), IOErrorOrTLSError> {
 
     let mut connection = Connection::new(stream);
 
-    connection.start_handshake()?;
+    if let Err(alert) = connection.start_handshake() {
+        connection.send_alert(alert)?;
+    }
 
     println!("Closing stream for: {}", addr);
     Ok(())

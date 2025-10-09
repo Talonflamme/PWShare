@@ -324,4 +324,14 @@ impl Connection {
 
         Ok(())
     }
+
+    /// Sends an alert to the connection, returning any Errors.
+    pub fn send_alert(&mut self, alert: Alert) -> Result<()> {
+        // TODO: set connection to closed or something, so that
+        //  it cannot be used after sending a fatal Alert
+
+        self.send_fragment(ContentTypeWithContent::Alert(alert))?;
+
+        Ok(())
+    }
 }
