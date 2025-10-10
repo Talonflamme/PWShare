@@ -71,7 +71,9 @@ impl ReadableFromStream for CipherSuite {
 impl WritableToSink for CipherSuite {
     fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
         if matches!(self, CipherSuite::Unknown) {
-            return Err(Alert::internal_error("Unknown cipher suite cannot be written"));
+            return Err(Alert::internal_error(
+                "Unknown cipher suite cannot be written",
+            ));
         }
 
         let v: u16 = self.into();
