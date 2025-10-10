@@ -48,6 +48,9 @@ fn handle_client(stream: TcpStream) -> Result<(), IOErrorOrTLSError> {
 
     connection.send_app_data(b"Hello World!".to_vec())?;
 
+    let received = connection.receive_app_data()?;
+    println!("Received: {:?}", String::from_utf8_lossy(&received));
+
     println!("Closing stream for: {}", addr);
     Ok(())
 }

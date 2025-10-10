@@ -18,6 +18,40 @@ pub enum BulkCipherAlgorithm {
     AesCbc,
 }
 
+impl BulkCipherAlgorithm {
+    /// Sets `.cipher_type`, `.block_length`, `.fixed_iv_length`, `.record_iv_length` to the
+    /// values matching `self`.
+    pub fn set_params(self, params: &mut SecurityParameters) {
+        match self {
+            BulkCipherAlgorithm::Null => {
+                params.cipher_type = Some(CipherType::Stream);
+                params.block_length = Some(0);
+                params.fixed_iv_length = Some(0);
+                params.record_iv_length = Some(0);
+            }
+            BulkCipherAlgorithm::Rc4 => {
+                params.cipher_type = Some(CipherType::Stream);
+                params.block_length = Some(0);
+                params.fixed_iv_length = Some(0);
+                params.record_iv_length = Some(0);
+            }
+            BulkCipherAlgorithm::TDes => {
+                params.cipher_type = Some(CipherType::Block);
+                params.block_length = Some(8);
+                params.fixed_iv_length = Some(8);
+                params.record_iv_length = Some(8);
+            }
+            BulkCipherAlgorithm::AesCbc => {
+                params.cipher_type = Some(CipherType::Block);
+                params.block_length = Some(16);
+                params.fixed_iv_length = Some(16);
+                params.record_iv_length = Some(16);
+            }
+        }
+        params.bulk_cipher_algorithm = Some(self);
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum CipherType {
     Stream,
@@ -109,7 +143,9 @@ impl SecurityParameters {
     pub fn new_no_encryption(entity: ConnectionEnd) -> Self {
         let mut params = Self::new(entity);
         params.compression_algorithm = Some(CompressionMethod::Null);
-        CipherSuite::TlsNullWithNullNull.set_security_params(&mut params);
+        CipherSuite::TlsNullWithNullNull
+            .set_security_params(&mut params)
+            .expect("TLS_NULL_WITH_NULL_NULL should be able to set parameters");
         params
     }
 }

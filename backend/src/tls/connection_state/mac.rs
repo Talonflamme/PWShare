@@ -1,4 +1,5 @@
 use crate::cryptography::hashing::{self, HashFunction};
+use crate::tls::connection_state::security_parameters::SecurityParameters;
 
 #[derive(Debug, Clone, Copy)]
 pub enum MACAlgorithm {
@@ -70,7 +71,6 @@ impl MACAlgorithm {
         }
     }
 
-
     /// Applies the HMAC-X algorithm, with x being the hash function of `self`. The return value
     /// will always have the output length of the hashing algorithm as a length, since the
     /// last step in `HMAC-X` is calling the Hash function.
@@ -80,6 +80,43 @@ impl MACAlgorithm {
     /// * `m` - The message to be authenticated.
     pub fn hmac(&self, k: &[u8], m: &[u8]) -> Vec<u8> {
         hmac(self.get_hash().as_ref(), k, m)
+    }
+
+    /// Sets `.mac_algorithm`, `.mac_length` and `.mac_key_length` of a `SecurityParameters`
+    /// to the values matching `self`.
+    pub fn set_params(&self, params: &mut SecurityParameters) {
+        match self {
+            Self::Null => {
+                params.mac_algorithm = Some(MACAlgorithm::Null);
+                params.mac_length = Some(0);
+                params.mac_key_length = Some(0);
+            }
+            Self::HMacMd5 => {
+                params.mac_algorithm = Some(MACAlgorithm::HMacMd5);
+                params.mac_length = Some(16);
+                params.mac_key_length = Some(16);
+            }
+            Self::HMacSha1 => {
+                params.mac_algorithm = Some(MACAlgorithm::HMacSha1);
+                params.mac_length = Some(20);
+                params.mac_key_length = Some(20);
+            }
+            Self::HMacSha256 => {
+                params.mac_algorithm = Some(MACAlgorithm::HMacSha256);
+                params.mac_length = Some(32);
+                params.mac_key_length = Some(32);
+            }
+            Self::HMacSha384 => {
+                params.mac_algorithm = Some(MACAlgorithm::HMacSha384);
+                params.mac_length = Some(48);
+                params.mac_key_length = Some(48);
+            }
+            Self::HMacSha512 => {
+                params.mac_algorithm = Some(MACAlgorithm::HMacSha512);
+                params.mac_length = Some(64);
+                params.mac_key_length = Some(64);
+            }
+        }
     }
 }
 

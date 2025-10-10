@@ -158,7 +158,7 @@ impl Connection {
         let cipher_suite = cipher_suite::select_cipher_suite(&client_hello.cipher_suites)?;
         let mut extensions = extensions::filter_extensions(&client_hello.extensions);
 
-        cipher_suite.set_security_params(&mut self.connection_states.pending_parameters);
+        cipher_suite.set_security_params(&mut self.connection_states.pending_parameters)?;
 
         extensions.push(Extension {
             extension_type: ExtensionType::new_renegotiation_info(RenegotiationInfoExtension {
