@@ -191,8 +191,7 @@ impl Connection {
 
     fn send_certificate(&mut self) -> Result<Vec<u8>> {
         let asn1cert = ASN1Cert::from_file("cert.pem").map_err(|e| {
-            eprintln!("Failed reading certificate file: {}", e);
-            Alert::internal_error()
+            Alert::internal_error(format!("Failed reading certificate file: {}", e))
         })?;
 
         let certificate = Certificate {
@@ -267,8 +266,7 @@ impl Connection {
         tls_ciphertext.write(&mut bytes)?;
 
         self.stream.write_all(bytes.as_slice()).map_err(|e| {
-            eprintln!("Failed writing bytes: {}", e);
-            Alert::internal_error()
+            Alert::internal_error(format!("Failed writing bytes: {}", e))
         })?;
 
         // increment sequence number of write state
@@ -282,12 +280,10 @@ impl Connection {
         client_key_exchange: ClientKeyExchange,
     ) -> Result<PreMasterSecret> {
         let key_content = fs::read_to_string("key.pem").map_err(|e| {
-            eprintln!("Error reading key file: {}", e);
-            Alert::internal_error()
+            Alert::internal_error(format!("Error reading key file: {}", e))
         })?;
         let key = PrivateKey::from_pem_content(key_content).map_err(|e| {
-            eprintln!("Error parsing .pem file: {}", e);
-            Alert::internal_error()
+            Alert::internal_error(format!("Error parsing .pem file: {}", e))
         })?;
 
         client_key_exchange

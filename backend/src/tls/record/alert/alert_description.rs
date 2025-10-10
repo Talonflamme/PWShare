@@ -1,9 +1,11 @@
-use pwshare_macros::{ReadableFromStream, WritableToSink};
+use crate::tls::record::alert::Alert;
+use crate::tls::{ReadableFromStream, Sink, WritableToSink};
+use pwshare_macros::IntoRepr;
 
 /// Description of an Alert layer of TLS.
 /// More info: https://www.rfc-editor.org/rfc/rfc5246.html#section-7.2.2
 #[repr(u8)]
-#[derive(ReadableFromStream, WritableToSink, Debug)]
+#[derive(Debug, IntoRepr)]
 pub enum AlertDescription {
     /// Signals that the connection will be terminated. Both parties are required to send
     /// this before closing the connection. Upon receiving this, a CloseNotify must be sent.
@@ -77,7 +79,7 @@ pub enum AlertDescription {
     /// An internal error unrelated to the peer or the correctness
     /// of the protocol makes it impossible to continue.
     /// This message is always fatal.
-    InternalError = 80,
+    InternalError(String) = 80,
     /// This handshake was canceled for some reason unrelated to protocol failure.
     /// This alert should be followed by a `close_notify` and is generally a warning.
     UserCanceled = 90,
@@ -91,4 +93,59 @@ pub enum AlertDescription {
     /// they did not put in the corresponding `ClientHello`.
     /// This message is always fatal.
     UnsupportedExtension = 110,
+    /// If a code is unknown, stores the actual code inside of this variant. SHOULD NOT ever
+    /// be received by a properly coded peer. MUST NOT ever be sent.
+    Unknown(u8),
+}
+
+impl From<u8> for AlertDescription {
+    #[allow(deprecated)]
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::CloseNotify,
+            10 => Self::UnexpectedMessage,
+            20 => Self::BadRecordMac,
+            21 => Self::DecryptionFailedReserved,
+            22 => Self::RecordOverflow,
+            30 => Self::DecompressionFailure,
+            40 => Self::HandshakeFailure,
+            41 => Self::NoCertificateReserved,
+            42 => Self::BadCertificate,
+            43 => Self::UnsupportedCertificate,
+            44 => Self::CertificateRevoked,
+            45 => Self::CertificateExpired,
+            46 => Self::CertificateUnknown,
+            47 => Self::IllegalParameter,
+            48 => Self::UnknownCa,
+            49 => Self::AccessDenied,
+            50 => Self::DecodeError,
+            51 => Self::DecryptError,
+            60 => Self::ExportRestrictionReserved,
+            70 => Self::ProtocolVersion,
+            71 => Self::InsufficientSecurity,
+            90 => Self::UserCanceled,
+            100 => Self::NoRenegotiation,
+            110 => Self::UnsupportedExtension,
+            v => Self::Unknown(v),
+        }
+    }
+}
+
+impl ReadableFromStream for AlertDescription {
+    fn read(stream: &mut impl Iterator<Item = u8>) -> crate::tls::record::alert::Result<Self> {
+        let repr = u8::read(stream)?;
+        Ok(Self::from(repr))
+    }
+}
+
+impl WritableToSink for AlertDescription {
+    fn write(&self, buffer: &mut impl Sink<u8>) -> crate::tls::record::alert::Result<()> {
+        if matches!(self, Self::Unknown(_)) {
+            Err(Alert::internal_error("Cannot write Unknown AlertDescription"))
+        } else {
+            let repr: u8 = self.into();
+            repr.write(buffer)?;
+            Ok(())
+        }
+    }
 }

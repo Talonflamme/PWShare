@@ -26,7 +26,7 @@ impl ReadableFromStream for HashAlgorithm {
 impl WritableToSink for HashAlgorithm {
     fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
         if matches!(self, Self::Unknown) {
-            Err(Alert::internal_error()) // cannot write Unknown, should never come here
+            Err(Alert::internal_error("Cannot write unknown HashAlgorithm")) // should never come here
         } else {
             let u: u8 = self.into();
             u.write(buffer)

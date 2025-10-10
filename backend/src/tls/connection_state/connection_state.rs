@@ -23,8 +23,8 @@ pub struct ConnectionState {
 fn get_cipher(cipher_type: BulkCipherAlgorithm, key: Vec<u8>) -> Result<Box<dyn TLSCipher>> {
     match cipher_type {
         BulkCipherAlgorithm::Null => Ok(Box::new(TLSNullCipher {})),
-        BulkCipherAlgorithm::Rc4 => Err(Alert::internal_error()), // not implemented, should not occur
-        BulkCipherAlgorithm::TDes => Err(Alert::internal_error()), // not implemented, should not occur
+        BulkCipherAlgorithm::Rc4 => Err(Alert::internal_error("RC4 is not implemented")),
+        BulkCipherAlgorithm::TDes => Err(Alert::internal_error("3Des is not implemented")),
         BulkCipherAlgorithm::AesCbc => Ok(Box::new(TLSAesCbcCipher::new(key)?)),
     }
 }

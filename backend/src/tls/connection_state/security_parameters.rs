@@ -31,7 +31,7 @@ macro_rules! impl_getters {
             $(
                 pub fn $field (&self) -> Result<&$ty> {
                     self.$field.as_ref().ok_or(
-                        Alert::internal_error() // must be set by now
+                        Alert::internal_error(format!("`{}` should be set by now", stringify!($field))) // must be set by now
                     )
                 }
             )*

@@ -24,7 +24,7 @@ impl ReadableFromStream for SignatureAlgorithm {
 impl WritableToSink for SignatureAlgorithm {
     fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
         if matches!(self, Self::Unknown) {
-            Err(Alert::internal_error()) // cannot write, should not occur
+            Err(Alert::internal_error("Cannot write unknown SignatureAlgorithm")) // should not occur
         } else {
             let u: u8 = self.into();
             u.write(buffer)

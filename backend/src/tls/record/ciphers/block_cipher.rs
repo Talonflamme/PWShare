@@ -64,9 +64,12 @@ impl TLSAesCbcCipher {
                 let key = AESKey256::new(words);
                 AnyAESCipher::AES256(AESCipher::new(key))
             }
-            _ => {
+            keylen => {
                 // unknown key length, should not occur since those ciphers are not selected
-                return Err(Alert::internal_error());
+                return Err(Alert::internal_error(format!(
+                    "Unknown AES CBC key length: {}",
+                    keylen
+                )));
             }
         };
 
@@ -121,8 +124,9 @@ fn block_decrypt(
     let fragment = if let CipherType::Block(gcb) = ciphertext.fragment {
         gcb
     } else {
-        // called TLSBlockCipher.decrypt on something other than GenericBlockCipher
-        return Err(Alert::internal_error());
+        return Err(Alert::internal_error(
+            "TLSBlockCipher.decrypt called on something other than GenericBlockCipher",
+        ));
     };
 
     // even when padding is invalid, we still compute the mac and do all other
@@ -163,7 +167,9 @@ impl TLSBlockCipher for TLSAesCbcCipher {
         let bytes = fragment.to_bytes();
 
         if bytes.len() % 16 != 0 {
-            return Err(Alert::internal_error()); // must be a multiple of block size (128)
+            return Err(Alert::internal_error(
+                "GenericBlockCipherInner's padding must result in a multiple of 128 bits",
+            ));
         }
 
         let chunks: Vec<u128> = bytes
@@ -172,7 +178,8 @@ impl TLSBlockCipher for TLSAesCbcCipher {
             .collect();
 
         let iv = u128::from_be_bytes(
-            iv.try_into().map_err(|_| Alert::internal_error())?, // bad IV length
+            iv.try_into()
+                .map_err(|_| Alert::internal_error("bad IV length"))?,
         );
 
         let ciphertext = match &self.key {

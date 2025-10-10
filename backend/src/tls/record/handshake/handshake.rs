@@ -108,7 +108,7 @@ impl WritableToSink for Handshake {
         buffer.push(typ);
 
         if body_buffer.len() >= (1 << 24) {
-            return Err(Alert::internal_error()); // length too large, should not occur
+            return Err(Alert::internal_error("Length of record layer out of bounds")); // should not occur
         }
 
         let len_bytes_be = body_buffer.len().to_be_bytes();

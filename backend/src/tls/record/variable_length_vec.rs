@@ -96,7 +96,10 @@ where
         let length = content_buf.len();
 
         if length < MIN || length > MAX {
-            Err(Alert::internal_error()) // length out of permitted range
+            Err(Alert::internal_error(format!(
+                "Length {} of VariableLengthVec out of bounds: {}..={}",
+                length, MIN, MAX
+            ))) // length out of permitted range
         } else {
             let length = &length.to_be_bytes()[size_of::<usize>() - amount_bytes_for_len..];
 

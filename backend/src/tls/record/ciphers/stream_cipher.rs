@@ -57,7 +57,7 @@ impl TLSCipher for TLSNullCipher {
     ) -> Result<TLSCompressed> {
         let frag = match ciphertext.fragment {
             CipherType::Stream(s) => s,
-            _ => return Err(Alert::internal_error()), // called TLSStreamCipher.decrypt on something other than StreamCiphered
+            _ => return Err(Alert::internal_error("called TLSStreamCipher.decrypt on something other than StreamCiphered")), 
         };
 
         let generic_stream_cipher = self.decrypt_struct(frag, con_state)?;

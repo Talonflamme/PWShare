@@ -12,7 +12,7 @@ impl Alert {
     pub fn is_fatal(&self) -> bool {
         self.level == AlertLevel::Fatal
     }
-    
+
     #[inline]
     pub fn close_notify() -> Self {
         Self {
@@ -158,10 +158,10 @@ impl Alert {
     }
 
     #[inline]
-    pub fn internal_error() -> Self {
+    pub fn internal_error<S: Into<String>>(err: S) -> Self {
         Self {
             level: AlertLevel::Fatal,
-            description: AlertDescription::InternalError,
+            description: AlertDescription::InternalError(err.into()),
         }
     }
 

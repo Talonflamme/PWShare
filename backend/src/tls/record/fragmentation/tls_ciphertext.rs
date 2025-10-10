@@ -130,8 +130,7 @@ impl TLSCiphertext {
         // Header contains 5 bytes
         let mut header_buf = [0u8; 5];
         connection.stream.read_exact(&mut header_buf).map_err(|e| {
-            eprintln!("Failed reading bytes: {}", e);
-            Alert::internal_error()
+            Alert::internal_error(format!("Failed reading bytes: {}", e))
         })?;
 
         let mut iter = header_buf.into_iter();
@@ -150,8 +149,7 @@ impl TLSCiphertext {
             .stream
             .read_exact(fragment_buf.as_mut_slice())
             .map_err(|e| {
-                eprintln!("Failed reading bytes: {}", e);
-                Alert::internal_error()
+                Alert::internal_error(format!("Failed reading bytes: {}", e))
             })?;
 
         let current_read = &connection.connection_states.current_read;
@@ -185,7 +183,7 @@ impl TLSCiphertext {
         let length = frag_buffer.len();
 
         if length > 18432 {
-            return Err(Alert::internal_error()); // length out of bounds
+            return Err(Alert::internal_error("Length of TLSCiphertext out of bounds"));
         }
 
         let length = length as u16;
