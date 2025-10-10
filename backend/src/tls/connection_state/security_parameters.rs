@@ -15,7 +15,7 @@ pub enum BulkCipherAlgorithm {
     Null,
     Rc4,
     TDes, // 3des, Triple Des
-    Aes,
+    AesCbc,
 }
 
 #[derive(Debug, Clone, Copy)]

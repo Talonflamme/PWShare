@@ -7,6 +7,8 @@ use crate::tls::record::alert::{Alert, Result};
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use pwshare_macros::{FromRepr, IntoRepr};
 
+// TODO: add more (modern) ciphers
+
 #[repr(u16)]
 #[derive(Debug, FromRepr, Clone, Copy, PartialEq, Eq, IntoRepr)]
 pub enum CipherSuite {
@@ -162,7 +164,7 @@ macro_rules! define_suite {
         mac = $mac: ident
     ) => {
         $params.prf_algorithm = Some($prf);
-        $params.bulk_cipher_algorithm = Some(BulkCipherAlgorithm::Aes);
+        $params.bulk_cipher_algorithm = Some(BulkCipherAlgorithm::AesCbc);
         $params.cipher_type = Some(CipherType::Block);
         $params.enc_key_length = Some($key_len);
         $params.block_length = Some(16);

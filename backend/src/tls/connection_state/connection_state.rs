@@ -25,7 +25,7 @@ fn get_cipher(cipher_type: BulkCipherAlgorithm, key: Vec<u8>) -> Result<Box<dyn 
         BulkCipherAlgorithm::Null => Ok(Box::new(TLSNullCipher {})),
         BulkCipherAlgorithm::Rc4 => Err(Alert::internal_error()), // not implemented, should not occur
         BulkCipherAlgorithm::TDes => Err(Alert::internal_error()), // not implemented, should not occur
-        BulkCipherAlgorithm::Aes => Ok(Box::new(TLSAesCbcCipher::new(key)?)),
+        BulkCipherAlgorithm::AesCbc => Ok(Box::new(TLSAesCbcCipher::new(key)?)),
     }
 }
 
