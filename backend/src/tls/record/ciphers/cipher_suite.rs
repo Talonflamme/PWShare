@@ -149,7 +149,7 @@ impl CipherSuite {
 
 /// A list of Cipher Suites, that are supported by this server. They in order of preference
 /// in descending order (most preferable first).
-const SUPPORTED_CIPHER_SUITES: [CipherSuite; 4] = [
+pub const SUPPORTED_CIPHER_SUITES: [CipherSuite; 4] = [
     CipherSuite::TlsRsaWithAes256CbcSha256,
     CipherSuite::TlsRsaWithAes256CbcSha,
     CipherSuite::TlsRsaWithAes128CbcSha256,

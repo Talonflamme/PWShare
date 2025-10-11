@@ -5,3 +5,5 @@ pub mod tls_main;
 mod record;
 mod connection_state;
 mod connection;
+#[cfg(test)]
+mod tests;
