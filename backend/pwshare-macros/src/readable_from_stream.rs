@@ -1,7 +1,7 @@
+use crate::get_repr_type;
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
-use syn::{Data, DeriveInput, Fields, LitStr};
-use crate::get_repr_type;
+use syn::{Data, DeriveInput, Fields};
 
 pub fn impl_readable_from_stream_trait(ast: DeriveInput) -> TokenStream {
     let name = &ast.ident;
@@ -73,8 +73,6 @@ pub fn impl_readable_from_stream_trait(ast: DeriveInput) -> TokenStream {
                     return quote! { compile_error!("ReadableFromStream requires all variants to have a discriminant"); }.into();
                 }
             }
-
-            let lit_name = LitStr::new(name.to_string().as_str(), name.span());
 
             quote! {
                 let value: #repr = crate::tls::ReadableFromStream::read(stream)?;
