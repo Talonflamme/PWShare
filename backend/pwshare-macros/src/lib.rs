@@ -1,9 +1,11 @@
+mod cipher_suite_tests;
+mod f128;
 mod from_repr;
 mod into_repr;
 mod readable_from_stream;
 mod writable_to_sink;
-mod f128;
 
+use crate::f128::F128;
 use crate::from_repr::impl_from_repr;
 use crate::into_repr::impl_into_repr;
 use crate::writable_to_sink::impl_writable_to_sink;
@@ -12,7 +14,6 @@ use proc_macro2::Span;
 use quote::quote;
 use readable_from_stream::impl_readable_from_stream_trait;
 use syn::{DeriveInput, Ident, LitInt};
-use crate::f128::F128;
 
 fn get_repr_type(ast: &DeriveInput) -> Option<Ident> {
     for attr in &ast.attrs {
@@ -142,5 +143,11 @@ pub fn generate_k_sha512(_: TokenStream) -> TokenStream {
 
     quote! {
         [#(#literals),*]
-    }.into()
+    }
+    .into()
+}
+
+#[proc_macro]
+pub fn generate_cipher_suite_tests(input: TokenStream) -> TokenStream {
+    cipher_suite_tests::generate_cipher_tests(input)
 }

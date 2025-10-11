@@ -1,5 +1,6 @@
 use crate::tls::connection::Connection;
 use crate::tls::record::ciphers::cipher_suite::{CipherSuite, SUPPORTED_CIPHER_SUITES};
+use pwshare_macros::generate_cipher_suite_tests;
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::process::Command;
@@ -31,7 +32,14 @@ fn test_cipher_suite_handle_client(
     assert_eq!(message_to_receive.into_bytes(), recv);
 }
 
-fn test_cipher_suite(listener: &TcpListener, cipher_suite: CipherSuite) {
+fn test_cipher_suite(cipher_suite: CipherSuite, index: usize) {
+    let port = 7810 + index;
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap();
+
+    listener
+        .set_nonblocking(true)
+        .expect("Cannot set to non-blocking");
+
     let message_to_send = format!("Hello world from server using: {:?}", cipher_suite);
     let message_to_receive = format!("Hello back from client using: {:?}", cipher_suite);
 
@@ -40,13 +48,12 @@ fn test_cipher_suite(listener: &TcpListener, cipher_suite: CipherSuite) {
     let client_file = current_file.parent().unwrap().join("test_client.py");
     assert!(client_file.exists(), "Failed to resolve `test_client.py`");
 
-    let port = listener.local_addr().unwrap().port().to_string();
     let cipher = cipher_suite as u16;
 
     let child = Command::new("python")
         .arg(client_file)
         .arg("--port")
-        .arg(port)
+        .arg(port.to_string())
         .arg("--cipher")
         .arg(format!("{:04X}", cipher))
         .arg("--expect")
@@ -98,15 +105,4 @@ fn test_cipher_suite(listener: &TcpListener, cipher_suite: CipherSuite) {
     assert!(output.status.success());
 }
 
-#[test]
-fn test_supported_cipher_suites() {
-    let listener = TcpListener::bind("127.0.0.1:7810").unwrap();
-
-    listener
-        .set_nonblocking(true)
-        .expect("Cannot set to non-blocking");
-
-    for c in SUPPORTED_CIPHER_SUITES {
-        test_cipher_suite(&listener, c);
-    }
-}
+generate_cipher_suite_tests!(SUPPORTED_CIPHER_SUITES, 4);
