@@ -38,44 +38,143 @@ struct DecryptStructResult {
     padding_error: Option<Alert>,
 }
 
-#[derive(Debug)]
-enum AnyAESCipher {
-    AES128(AESCipher<AESKey128, CBC>),
-    AES256(AESCipher<AESKey256, CBC>),
-}
+macro_rules! impl_tls_aes_cbc {
+    ($typ:ident, $key:ident) => {
+        #[derive(Debug)]
+        pub struct $typ {
+            cipher: AESCipher<$key, CBC>
+        }
 
-#[derive(Debug)]
-pub struct TLSAesCbcCipher {
-    key: AnyAESCipher,
-}
+        impl $typ {
+            pub fn new(key: Vec<u8>) -> Result<Self> {
+                if key.len() != $key::BYTES {
+                    // unknown key length, should not occur since those ciphers are not selected
+                    return Err(Alert::internal_error(format!(
+                        "Unexpected AES CBC key length: {}, expected: {}",
+                        key.len(), $key::BYTES
+                    )));
+                }
 
-impl TLSAesCbcCipher {
-    pub fn new(key: Vec<u8>) -> Result<Self> {
-        let key = match key.len() {
-            16 => {
-                let mut words = [0u32; 4];
+                let mut words = [0u32; $key::BYTES / 4];
                 copy_chunk_into_words_be!(key.as_slice(), words, u32);
-                let key = AESKey128::new(words);
-                AnyAESCipher::AES128(AESCipher::new(key))
+                let k = $key::new(words);
+                Ok(Self { cipher: AESCipher::new(k) })
             }
-            32 => {
-                let mut words = [0u32; 8];
-                copy_chunk_into_words_be!(key.as_slice(), words, u32);
-                let key = AESKey256::new(words);
-                AnyAESCipher::AES256(AESCipher::new(key))
-            }
-            keylen => {
-                // unknown key length, should not occur since those ciphers are not selected
-                return Err(Alert::internal_error(format!(
-                    "Unknown AES CBC key length: {}",
-                    keylen
-                )));
-            }
-        };
+        }
 
-        Ok(TLSAesCbcCipher { key })
-    }
+        impl TLSBlockCipher for $typ {
+            fn encrypt_struct(&self, fragment: GenericBlockCipherInner, iv: &[u8]) -> Result<BlockCiphered<GenericBlockCipherInner>> {
+                let bytes = fragment.to_bytes();
+
+                if bytes.len() % 16 != 0 {
+                    return Err(Alert::internal_error(
+                        "GenericBlockCipherInner's padding must result in a multiple of 128 bits for AES",
+                    ));
+                }
+
+                let chunks: Vec<u128> = bytes
+                    .chunks(16)
+                    .map(|chunk| u128::from_be_bytes(chunk.try_into().unwrap()))
+                    .collect();
+
+                let iv = u128::from_be_bytes(
+                    iv.try_into()
+                        .map_err(|_| Alert::internal_error("bad IV length"))?,
+                );
+
+                let ciphertext = self.cipher.encrypt(chunks.as_slice(), &CBC { iv });
+
+                let bytes: Vec<u8> = ciphertext
+                    .into_iter()
+                    .flat_map(|x| x.to_be_bytes())
+                    .collect();
+
+                Ok(BlockCiphered::new(bytes))
+            }
+
+            fn decrypt_struct(&self, fragment: BlockCiphered<GenericBlockCipherInner>, con_state: &ConnectionState, iv: &[u8]) -> Result<DecryptStructResult> {
+                let bytes = fragment.bytes;
+                let mac_length = *con_state.parameters.mac_length()? as usize;
+
+                if bytes.len() % 16 != 0 || bytes.len() < mac_length + 1 {
+                    return Err(Alert::bad_record_mac()); // also must be returned if length is not a multiple of block_size (128)
+                }
+
+                let chunks: Vec<u128> = bytes
+                    .chunks(16)
+                    .map(|c| u128::from_be_bytes(c.try_into().unwrap()))
+                    .collect();
+
+                let iv = u128::from_be_bytes(
+                    iv.try_into().map_err(|_| Alert::bad_record_mac())?, // bad IV length
+                );
+
+                let plaintext = self.cipher.decrypt(chunks.as_slice(), &CBC { iv });
+
+                let mut bytes: Vec<u8> = plaintext
+                    .into_iter()
+                    .flat_map(|x| x.to_be_bytes())
+                    .collect();
+
+                let padding_length = bytes.pop().unwrap();
+
+                if padding_length as usize > bytes.len() - mac_length {
+                    // assume 0 padding to prevent Timing Attack
+                    return Ok(DecryptStructResult {
+                        inner: GenericBlockCipherInner {
+                            content: bytes,
+                            mac: Vec::new(),     // field does not matter
+                            padding: Vec::new(), // assume 0 padding
+                            padding_length: 0,   // assume 0 padding
+                        },
+                        padding_error: Some(Alert::bad_record_mac()), // sent when padding values are incorrect
+                    });
+                }
+
+                let padding = bytes.split_off(bytes.len() - padding_length as usize);
+
+                // padding must all contain padding_length
+                if padding.iter().any(|&p| p != padding_length) {
+                    return Ok(DecryptStructResult {
+                        inner: GenericBlockCipherInner {
+                            content: bytes,
+                            mac: Vec::new(),     // field does not matter
+                            padding: Vec::new(), // assume 0 padding
+                            padding_length: 0,   // assume 0 padding
+                        },
+                        padding_error: Some(Alert::bad_record_mac()), // sent when padding values are incorrect
+                    });
+                }
+
+                let expected_mac = bytes.split_off(bytes.len() - mac_length);
+                let content = bytes;
+
+                Ok(DecryptStructResult {
+                    inner: GenericBlockCipherInner {
+                        content,
+                        mac: expected_mac,
+                        padding,
+                        padding_length,
+                    },
+                    padding_error: None,
+                })
+            }
+        }
+
+        impl TLSCipher for $typ {
+            fn encrypt(&self, plaintext: TLSCompressed, con_state: &ConnectionState) -> Result<TLSCiphertext> {
+                block_encrypt(self, plaintext, con_state)
+            }
+
+            fn decrypt(&self, ciphertext: TLSCiphertext, con_state: &ConnectionState) -> Result<TLSCompressed> {
+                block_decrypt(self, ciphertext, con_state)
+            }
+        }
+    };
 }
+
+impl_tls_aes_cbc!(TlsAes128CbcCipher, AESKey128);
+impl_tls_aes_cbc!(TlsAes256CbcCipher, AESKey256);
 
 fn block_encrypt(
     cipher: &impl TLSBlockCipher,
@@ -155,137 +254,5 @@ fn block_decrypt(
         Ok(tls_compressed)
     } else {
         Err(Alert::bad_record_mac())
-    }
-}
-
-impl TLSBlockCipher for TLSAesCbcCipher {
-    fn encrypt_struct(
-        &self,
-        fragment: GenericBlockCipherInner,
-        iv: &[u8],
-    ) -> Result<BlockCiphered<GenericBlockCipherInner>> {
-        let bytes = fragment.to_bytes();
-
-        if bytes.len() % 16 != 0 {
-            return Err(Alert::internal_error(
-                "GenericBlockCipherInner's padding must result in a multiple of 128 bits",
-            ));
-        }
-
-        let chunks: Vec<u128> = bytes
-            .chunks(16)
-            .map(|chunk| u128::from_be_bytes(chunk.try_into().unwrap()))
-            .collect();
-
-        let iv = u128::from_be_bytes(
-            iv.try_into()
-                .map_err(|_| Alert::internal_error("bad IV length"))?,
-        );
-
-        let ciphertext = match &self.key {
-            AnyAESCipher::AES128(aes128) => aes128.encrypt(chunks.as_slice(), &CBC { iv }),
-            AnyAESCipher::AES256(aes256) => aes256.encrypt(chunks.as_slice(), &CBC { iv }),
-        };
-
-        let bytes: Vec<u8> = ciphertext
-            .into_iter()
-            .flat_map(|x| x.to_be_bytes())
-            .collect();
-
-        Ok(BlockCiphered::new(bytes))
-    }
-
-    fn decrypt_struct(
-        &self,
-        fragment: BlockCiphered<GenericBlockCipherInner>,
-        con_state: &ConnectionState,
-        iv: &[u8],
-    ) -> Result<DecryptStructResult> {
-        let bytes = fragment.bytes;
-        let mac_length = *con_state.parameters.mac_length()? as usize;
-
-        if bytes.len() % 16 != 0 || bytes.len() < mac_length + 1 {
-            return Err(Alert::bad_record_mac()); // also must be returned if length is not a multiple of block_size (128)
-        }
-
-        let chunks: Vec<u128> = bytes
-            .chunks(16)
-            .map(|c| u128::from_be_bytes(c.try_into().unwrap()))
-            .collect();
-
-        let iv = u128::from_be_bytes(
-            iv.try_into().map_err(|_| Alert::bad_record_mac())?, // bad IV length
-        );
-
-        let plaintext = match &self.key {
-            AnyAESCipher::AES128(aes128) => aes128.decrypt(chunks.as_slice(), &CBC { iv }),
-            AnyAESCipher::AES256(aes256) => aes256.decrypt(chunks.as_slice(), &CBC { iv }),
-        };
-
-        let mut bytes: Vec<u8> = plaintext
-            .into_iter()
-            .flat_map(|x| x.to_be_bytes())
-            .collect();
-
-        let padding_length = bytes.pop().unwrap();
-
-        if padding_length as usize > bytes.len() - mac_length {
-            // assume 0 padding to prevent Timing Attack
-            return Ok(DecryptStructResult {
-                inner: GenericBlockCipherInner {
-                    content: bytes,
-                    mac: Vec::new(),     // field does not matter
-                    padding: Vec::new(), // assume 0 padding
-                    padding_length: 0,   // assume 0 padding
-                },
-                padding_error: Some(Alert::bad_record_mac()), // sent when padding values are incorrect
-            });
-        }
-
-        let padding = bytes.split_off(bytes.len() - padding_length as usize);
-
-        // padding must all contain padding_length
-        if padding.iter().any(|&p| p != padding_length) {
-            return Ok(DecryptStructResult {
-                inner: GenericBlockCipherInner {
-                    content: bytes,
-                    mac: Vec::new(),     // field does not matter
-                    padding: Vec::new(), // assume 0 padding
-                    padding_length: 0,   // assume 0 padding
-                },
-                padding_error: Some(Alert::bad_record_mac()), // sent when padding values are incorrect
-            });
-        }
-
-        let expected_mac = bytes.split_off(bytes.len() - mac_length);
-        let content = bytes;
-
-        Ok(DecryptStructResult {
-            inner: GenericBlockCipherInner {
-                content,
-                mac: expected_mac,
-                padding,
-                padding_length,
-            },
-            padding_error: None,
-        })
-    }
-}
-
-impl TLSCipher for TLSAesCbcCipher {
-    fn encrypt(
-        &self,
-        plaintext: TLSCompressed,
-        con_state: &ConnectionState,
-    ) -> Result<TLSCiphertext> {
-        block_encrypt(self, plaintext, con_state)
-    }
-
-    fn decrypt(
-        &self,
-        ciphertext: TLSCiphertext,
-        con_state: &ConnectionState,
-    ) -> Result<TLSCompressed> {
-        block_decrypt(self, ciphertext, con_state)
     }
 }

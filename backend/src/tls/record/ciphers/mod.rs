@@ -5,4 +5,3 @@ pub mod block_cipher;
 pub mod key_exchange_algorithm;
 
 pub use stream_cipher::TLSNullCipher;
-pub use block_cipher::TLSAesCbcCipher;

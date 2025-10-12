@@ -105,28 +105,28 @@ impl CipherSuite {
             }),
             CipherSuite::TlsRsaWithAes256CbcSha256 => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
-                cipher: BulkCipherAlgorithm::AesCbc,
+                cipher: BulkCipherAlgorithm::Aes256Cbc,
                 mac: MACAlgorithm::HMacSha256,
                 prf: PRFAlgorithm::TlsPrfSha256, // TODO: idk if correct
                 key_length: 32,
             }),
             CipherSuite::TlsRsaWithAes256CbcSha => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
-                cipher: BulkCipherAlgorithm::AesCbc,
+                cipher: BulkCipherAlgorithm::Aes256Cbc,
                 mac: MACAlgorithm::HMacSha1,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 32,
             }),
             CipherSuite::TlsRsaWithAes128CbcSha256 => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
-                cipher: BulkCipherAlgorithm::AesCbc,
+                cipher: BulkCipherAlgorithm::Aes128Cbc,
                 mac: MACAlgorithm::HMacSha256,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 16,
             }),
             CipherSuite::TlsRsaWithAes128CbcSha => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
-                cipher: BulkCipherAlgorithm::AesCbc,
+                cipher: BulkCipherAlgorithm::Aes128Cbc,
                 mac: MACAlgorithm::HMacSha1,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 16,

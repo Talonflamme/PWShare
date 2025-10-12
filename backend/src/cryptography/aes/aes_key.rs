@@ -51,6 +51,8 @@ macro_rules! impl_aes_key {
         }
 
         impl $name {
+            pub const BYTES: usize = $bits / 8;
+
             pub fn new_random() -> Self {
                 let mut key = [0; Self::N];
 

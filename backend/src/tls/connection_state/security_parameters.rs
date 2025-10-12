@@ -15,7 +15,8 @@ pub enum BulkCipherAlgorithm {
     Null,
     Rc4,
     TDes, // 3des, Triple Des
-    AesCbc,
+    Aes128Cbc,
+    Aes256Cbc,
 }
 
 impl BulkCipherAlgorithm {
@@ -41,7 +42,7 @@ impl BulkCipherAlgorithm {
                 params.fixed_iv_length = Some(8);
                 params.record_iv_length = Some(8);
             }
-            BulkCipherAlgorithm::AesCbc => {
+            BulkCipherAlgorithm::Aes128Cbc | BulkCipherAlgorithm::Aes256Cbc => {
                 params.cipher_type = Some(CipherType::Block);
                 params.block_length = Some(16);
                 params.fixed_iv_length = Some(16);

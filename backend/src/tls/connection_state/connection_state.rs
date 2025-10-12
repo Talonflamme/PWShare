@@ -2,8 +2,9 @@ use crate::tls::connection_state::security_parameters::{
     BulkCipherAlgorithm, ConnectionEnd, SecurityParameters,
 };
 use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::ciphers::block_cipher::{TlsAes128CbcCipher, TlsAes256CbcCipher};
 use crate::tls::record::ciphers::cipher::TLSCipher;
-use crate::tls::record::ciphers::{TLSAesCbcCipher, TLSNullCipher};
+use crate::tls::record::ciphers::TLSNullCipher;
 
 #[derive(Debug)]
 pub struct ConnectionState {
@@ -25,7 +26,8 @@ fn get_cipher(cipher_type: BulkCipherAlgorithm, key: Vec<u8>) -> Result<Box<dyn 
         BulkCipherAlgorithm::Null => Ok(Box::new(TLSNullCipher {})),
         BulkCipherAlgorithm::Rc4 => Err(Alert::internal_error("RC4 is not implemented")),
         BulkCipherAlgorithm::TDes => Err(Alert::internal_error("3Des is not implemented")),
-        BulkCipherAlgorithm::AesCbc => Ok(Box::new(TLSAesCbcCipher::new(key)?)),
+        BulkCipherAlgorithm::Aes128Cbc => Ok(Box::new(TlsAes128CbcCipher::new(key)?)),
+        BulkCipherAlgorithm::Aes256Cbc => Ok(Box::new(TlsAes256CbcCipher::new(key)?)),
     }
 }
 
