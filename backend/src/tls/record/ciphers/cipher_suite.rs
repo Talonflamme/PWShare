@@ -166,5 +166,5 @@ pub fn select_cipher_suite(cipher_suites_from_client: &Vec<CipherSuite>) -> Resu
         }
     }
 
-    Err(Alert::insufficient_security())
+    Err(Alert::handshake_failure())
 }
