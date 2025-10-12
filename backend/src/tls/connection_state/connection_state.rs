@@ -3,8 +3,8 @@ use crate::tls::connection_state::security_parameters::{
 };
 use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::ciphers::block::aes_cbc::{TlsAes128CbcCipher, TlsAes256CbcCipher};
+use crate::tls::record::ciphers::stream::null::TLSNullCipher;
 use crate::tls::record::ciphers::cipher::TLSCipher;
-use crate::tls::record::ciphers::TLSNullCipher;
 
 #[derive(Debug)]
 pub struct ConnectionState {

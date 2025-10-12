@@ -1,13 +1,10 @@
 use crate::tls::connection_state::connection_state::ConnectionState;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::Alert;
 use crate::tls::record::ciphers::cipher::TLSCipher;
 use crate::tls::record::cryptographic_attributes::StreamCiphered;
-use crate::tls::record::fragmentation::tls_ciphertext::{
-    CipherType, GenericStreamCipher, TLSCiphertext,
-};
+use crate::tls::record::fragmentation::tls_ciphertext::{CipherType, GenericStreamCipher, TLSCiphertext};
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
-use std::fmt::Debug;
 
 #[derive(Debug)]
 pub struct TLSNullCipher;
@@ -16,7 +13,7 @@ impl TLSNullCipher {
     fn encrypt_struct(
         &self,
         fragment: GenericStreamCipher,
-    ) -> Result<StreamCiphered<GenericStreamCipher>> {
+    ) -> crate::tls::record::alert::Result<StreamCiphered<GenericStreamCipher>> {
         // no encryption
         Ok(StreamCiphered::new(fragment.to_bytes()))
     }
@@ -25,7 +22,7 @@ impl TLSNullCipher {
         &self,
         fragment: StreamCiphered<GenericStreamCipher>,
         con_state: &ConnectionState,
-    ) -> Result<GenericStreamCipher> {
+    ) -> crate::tls::record::alert::Result<GenericStreamCipher> {
         GenericStreamCipher::read(fragment.bytes, con_state)
     }
 }
@@ -35,7 +32,7 @@ impl TLSCipher for TLSNullCipher {
         &self,
         plaintext: TLSCompressed,
         con_state: &ConnectionState,
-    ) -> Result<TLSCiphertext> {
+    ) -> crate::tls::record::alert::Result<TLSCiphertext> {
         let mac = plaintext.generate_mac(con_state)?;
 
         let generic_stream_cipher = GenericStreamCipher {
@@ -54,10 +51,10 @@ impl TLSCipher for TLSNullCipher {
         &self,
         ciphertext: TLSCiphertext,
         con_state: &ConnectionState,
-    ) -> Result<TLSCompressed> {
+    ) -> crate::tls::record::alert::Result<TLSCompressed> {
         let frag = match ciphertext.fragment {
             CipherType::Stream(s) => s,
-            _ => return Err(Alert::internal_error("called TLSStreamCipher.decrypt on something other than StreamCiphered")), 
+            _ => return Err(Alert::internal_error("called TLSStreamCipher.decrypt on something other than StreamCiphered")),
         };
 
         let generic_stream_cipher = self.decrypt_struct(frag, con_state)?;
