@@ -44,7 +44,7 @@ macro_rules! handshake_not_done {
             ErrorKind::Other,
             "Cannot send application data when no handshake was done.",
         )))
-    }
+    };
 }
 
 impl ConnectionStates {
@@ -265,9 +265,9 @@ impl Connection {
         let mut bytes: Vec<u8> = Vec::new();
         tls_ciphertext.write(&mut bytes)?;
 
-        self.stream.write_all(bytes.as_slice()).map_err(|e| {
-            Alert::internal_error(format!("Failed writing bytes: {}", e))
-        })?;
+        self.stream
+            .write_all(bytes.as_slice())
+            .map_err(|e| Alert::internal_error(format!("Failed writing bytes: {}", e)))?;
 
         // increment sequence number of write state
         self.connection_states.current_write.sequence_number += 1;
@@ -279,12 +279,10 @@ impl Connection {
         &mut self,
         client_key_exchange: ClientKeyExchange,
     ) -> Result<PreMasterSecret> {
-        let key_content = fs::read_to_string("key.pem").map_err(|e| {
-            Alert::internal_error(format!("Error reading key file: {}", e))
-        })?;
-        let key = PrivateKey::from_pem_content(key_content).map_err(|e| {
-            Alert::internal_error(format!("Error parsing .pem file: {}", e))
-        })?;
+        let key_content = fs::read_to_string("key.pem")
+            .map_err(|e| Alert::internal_error(format!("Error reading key file: {}", e)))?;
+        let key = PrivateKey::from_pem_content(key_content)
+            .map_err(|e| Alert::internal_error(format!("Error parsing .pem file: {}", e)))?;
 
         client_key_exchange
             .exchange_keys
@@ -305,17 +303,9 @@ impl Connection {
         &mut self,
         pre_master_secret: PreMasterSecret,
     ) -> Result<[u8; 48]> {
-        if let Some(prf_func) = self
-            .connection_states
-            .pending_parameters
-            .prf_algorithm
-            .as_ref()
-        {
-            Ok(pre_master_secret
-                .convert_to_master(prf_func, &self.connection_states.pending_parameters))
-        } else {
-            Err(Alert::handshake_failure()) // no PRF negotiated yet
-        }
+        let prf_func = self.connection_states.pending_parameters.prf_algorithm()?;
+        Ok(pre_master_secret
+            .convert_to_master(prf_func, &self.connection_states.pending_parameters))
     }
 
     pub fn start_handshake(&mut self) -> std::result::Result<(), IOErrorOrTLSError> {
