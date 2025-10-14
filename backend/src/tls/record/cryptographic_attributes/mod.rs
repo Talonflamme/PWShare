@@ -1,5 +1,4 @@
 mod public_key_encrypted;
-mod aead_ciphered;
 
 use std::marker::PhantomData;
 pub use public_key_encrypted::PublicKeyEncrypted;

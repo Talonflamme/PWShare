@@ -2,9 +2,10 @@ use crate::tls::connection_state::security_parameters::{
     BulkCipherAlgorithm, ConnectionEnd, SecurityParameters,
 };
 use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::ciphers::aead::aes_gcm::{TlsAes128Gcm, TlsAes256Gcm};
 use crate::tls::record::ciphers::block::aes_cbc::{TlsAes128CbcCipher, TlsAes256CbcCipher};
-use crate::tls::record::ciphers::stream::null::TLSNullCipher;
 use crate::tls::record::ciphers::cipher::TLSCipher;
+use crate::tls::record::ciphers::stream::null::TLSNullCipher;
 
 #[derive(Debug)]
 pub struct ConnectionState {
@@ -19,6 +20,9 @@ pub struct ConnectionState {
     pub cipher: Box<dyn TLSCipher>,
 
     pub mac_key: Vec<u8>,
+    /// Either `client_write_IV` or `server_write_IV`. Only used for implicit `nonce` techniques
+    /// when using AEAD ciphers.
+    pub write_iv: Vec<u8>,
 }
 
 fn get_cipher(cipher_type: BulkCipherAlgorithm, key: Vec<u8>) -> Result<Box<dyn TLSCipher>> {
@@ -28,6 +32,8 @@ fn get_cipher(cipher_type: BulkCipherAlgorithm, key: Vec<u8>) -> Result<Box<dyn 
         BulkCipherAlgorithm::TDes => Err(Alert::internal_error("3Des is not implemented")),
         BulkCipherAlgorithm::Aes128Cbc => Ok(Box::new(TlsAes128CbcCipher::new(key)?)),
         BulkCipherAlgorithm::Aes256Cbc => Ok(Box::new(TlsAes256CbcCipher::new(key)?)),
+        BulkCipherAlgorithm::Aes128Gcm => Ok(Box::new(TlsAes128Gcm::new(key)?)),
+        BulkCipherAlgorithm::Aes256Gcm => Ok(Box::new(TlsAes256Gcm::new(key)?)),
     }
 }
 
@@ -38,6 +44,7 @@ impl ConnectionState {
             sequence_number: 0,
             cipher: Box::new(TLSNullCipher {}),
             mac_key: Vec::new(),
+            write_iv: Vec::new(),
         }
     }
 
@@ -63,9 +70,11 @@ impl ConnectionState {
         let entity = *parameters.entity()?;
         let mac_key_length = *parameters.mac_key_length()? as usize;
         let enc_key_length = *parameters.enc_key_length()? as usize;
+        let fixed_iv_length = *parameters.fixed_iv_length()? as usize;
 
         let mac_key: Vec<u8>;
         let enc_key: Vec<u8>;
+        let write_iv: Vec<u8>;
 
         if entity == ConnectionEnd::Client {
             mac_key = key_block.by_ref().take(mac_key_length).collect(); // take client_write_MAC_key
@@ -73,6 +82,11 @@ impl ConnectionState {
                 .by_ref()
                 .skip(mac_key_length) // skip server_write_MAC_key
                 .take(enc_key_length) // take client_write_key
+                .collect();
+            write_iv = key_block
+                .by_ref()
+                .skip(enc_key_length) // skip server_write_key
+                .take(fixed_iv_length) // take client_write_IV
                 .collect();
         } else {
             mac_key = key_block
@@ -85,6 +99,11 @@ impl ConnectionState {
                 .skip(enc_key_length) // skip client_write_key
                 .take(enc_key_length) // take server_write_key
                 .collect();
+            write_iv = key_block
+                .by_ref()
+                .skip(fixed_iv_length) // skip client_write_IV
+                .take(fixed_iv_length) // take server_write_IV
+                .collect();
         }
 
         let bulk_cipher = *parameters.bulk_cipher_algorithm()?;
@@ -94,6 +113,7 @@ impl ConnectionState {
             sequence_number: 0,
             cipher: get_cipher(bulk_cipher, enc_key)?,
             mac_key,
+            write_iv,
         })
     }
 }

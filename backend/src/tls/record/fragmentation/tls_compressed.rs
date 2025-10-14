@@ -10,6 +10,8 @@ use crate::tls::WritableToSink;
 pub struct TLSCompressed {
     pub(crate) content_type: ContentType,
     pub(crate) version: ProtocolVersion,
+    /// Length of the following `.fragment`
+    pub(crate) length: u16,
     pub(crate) fragment: VariableLengthVec<u8, 0, 17408>, // 2^14 + 1024
 }
 
@@ -19,10 +21,13 @@ impl TLSCompressed {
     pub fn decompress(self, con_state: &ConnectionState) -> Result<TLSPlaintext> {
         let compression = con_state.parameters.compression_algorithm()?;
 
+        let fragment = compression.decompress(self.fragment)?;
+
         Ok(TLSPlaintext {
             content_type: self.content_type,
             version: self.version,
-            fragment: compression.decompress(self.fragment)?,
+            length: fragment.len() as u16,
+            fragment,
         })
     }
 

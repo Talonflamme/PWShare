@@ -21,7 +21,18 @@ impl<K: AESKey, M: BasicModeOfOperation> Debug for AESCipher<K, M> {
 
 pub struct AESCipherAead<K: AESKey, M: AeadModeOfOperation> {
     pub key: K,
-    pub mode: M,
+    _marker: PhantomData<M>,
+}
+
+impl<K: AESKey, M: AeadModeOfOperation> Debug for AESCipherAead<K, M> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "AESCipherAEAD<{}> {{ key: {:?} }}",
+            std::any::type_name::<M>().rsplit("::").next().unwrap(),
+            self.key
+        )
+    }
 }
 
 impl<K: AESKey, M: BasicModeOfOperation> AESCipher<K, M> {
@@ -42,12 +53,12 @@ impl<K: AESKey, M: BasicModeOfOperation> AESCipher<K, M> {
 }
 
 impl<K: AESKey, M: AeadModeOfOperation> AESCipherAead<K, M> {
-    pub fn new(key: K, mode: M) -> Self {
-        Self { key, mode }
+    pub fn new(key: K) -> Self {
+        Self { key, _marker: PhantomData }
     }
 
-    pub fn encrypt(&self, plaintext: &[u8], aad: Option<&[u8]>) -> (Vec<u8>, u128) {
-        self.mode.encrypt(&self.key, plaintext, aad)
+    pub fn encrypt(&self, plaintext: &[u8], aad: Option<&[u8]>, mode: &M) -> (Vec<u8>, u128) {
+        mode.encrypt(&self.key, plaintext, aad)
     }
 
     pub fn decrypt(
@@ -55,7 +66,8 @@ impl<K: AESKey, M: AeadModeOfOperation> AESCipherAead<K, M> {
         ciphertext: &[u8],
         aad: Option<&[u8]>,
         tag: u128,
+        mode: &M,
     ) -> Result<Vec<u8>, AeadDecryptionTagMismatch> {
-        self.mode.decrypt(&self.key, ciphertext, aad, tag)
+        mode.decrypt(&self.key, ciphertext, aad, tag)
     }
 }

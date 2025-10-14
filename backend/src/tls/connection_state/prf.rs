@@ -1,10 +1,11 @@
-use crate::cryptography::hashing::{HashFunction, Sha256};
+use crate::cryptography::hashing::{HashFunction, Sha256, Sha384};
 use crate::tls::connection_state::mac::hmac;
 use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Copy)]
 pub enum PRFAlgorithm {
     TlsPrfSha256,
+    TlsPrfSha384,
 }
 
 /// Struct for implementing the `P_hash` function.
@@ -91,6 +92,7 @@ impl PRFAlgorithm {
     pub fn get_hash(&self) -> Box<dyn HashFunction> {
         match self {
             PRFAlgorithm::TlsPrfSha256 => Box::new(Sha256),
+            PRFAlgorithm::TlsPrfSha384 => Box::new(Sha384),
         }
     }
 

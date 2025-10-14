@@ -3,7 +3,7 @@ use crate::tls::record::alert::Result;
 pub trait Sink<T> {
     fn push(&mut self, byte: T);
     fn extend_from_slice(&mut self, src: &[T]);
-    fn extend(&mut self, iter: impl IntoIterator<Item=T>);
+    fn extend(&mut self, iter: impl IntoIterator<Item = T>);
     fn append(&mut self, vec: Vec<T>);
 }
 
@@ -16,7 +16,7 @@ impl Sink<u8> for Vec<u8> {
         self.extend_from_slice(src)
     }
 
-    fn extend(&mut self, iter: impl IntoIterator<Item=u8>) {
+    fn extend(&mut self, iter: impl IntoIterator<Item = u8>) {
         Extend::extend(self, iter)
     }
 
@@ -53,7 +53,17 @@ impl WritableToSink for u32 {
     }
 }
 
-impl<T, const N: usize> WritableToSink for [T; N] where T: WritableToSink {
+impl WritableToSink for u64 {
+    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+        buffer.extend_from_slice(&self.to_be_bytes());
+        Ok(())
+    }
+}
+
+impl<T, const N: usize> WritableToSink for [T; N]
+where
+    T: WritableToSink,
+{
     fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
         for e in self {
             e.write(buffer)?;

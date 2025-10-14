@@ -2,7 +2,7 @@ use crate::tls::connection::Connection;
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::connection_state::security_parameters;
 use crate::tls::record::alert::{Alert, Result};
-use crate::tls::record::cryptographic_attributes::{BlockCiphered, StreamCiphered};
+use crate::tls::record::cryptographic_attributes::{AeadCiphered, BlockCiphered, StreamCiphered};
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::fragmentation::tls_plaintext::ContentType;
 use crate::tls::record::protocol_version::ProtocolVersion;
@@ -79,17 +79,36 @@ impl GenericBlockCipherInner {
     }
 }
 
-pub(crate) struct GenericAEADCipher {}
+pub(crate) struct GenericAEADCipher {
+    pub nonce_explicit: Vec<u8>,
+    pub content: AeadCiphered<Vec<u8>>,
+    pub auth_tag: u128,
+}
 
 impl GenericAEADCipher {
-    fn read(fragment: Vec<u8>, con_state: &ConnectionState) -> Result<Self> {
-        todo!()
+    fn read(mut fragment: Vec<u8>, con_state: &ConnectionState) -> Result<Self> {
+        let record_iv_length = *con_state.parameters.record_iv_length()? as usize;
+
+        if fragment.len() < record_iv_length + 16 {
+            Err(Alert::bad_record_mac())
+        } else {
+            let mut content = fragment.split_off(record_iv_length);
+            let auth_tag = content.split_off(content.len() - 16);
+            let auth_tag = u128::from_be_bytes(auth_tag.try_into().unwrap());
+            Ok(Self {
+                nonce_explicit: fragment,
+                content: AeadCiphered::new(content),
+                auth_tag,
+            })
+        }
     }
 }
 
 impl WritableToSink for GenericAEADCipher {
     fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
-        todo!()
+        buffer.extend_from_slice(&self.nonce_explicit);
+        buffer.extend_from_slice(&self.content.bytes);
+        Ok(())
     }
 }
 
@@ -116,6 +135,7 @@ impl WritableToSink for CipherType {
 pub struct TLSCiphertext {
     pub(crate) content_type: ContentType,
     pub(crate) version: ProtocolVersion,
+    pub(crate) length: u16, 
     pub(crate) fragment: CipherType,
 }
 
@@ -129,9 +149,10 @@ impl TLSCiphertext {
     pub fn read_from_connection(connection: &mut Connection) -> Result<Self> {
         // Header contains 5 bytes
         let mut header_buf = [0u8; 5];
-        connection.stream.read_exact(&mut header_buf).map_err(|e| {
-            Alert::internal_error(format!("Failed reading bytes: {}", e))
-        })?;
+        connection
+            .stream
+            .read_exact(&mut header_buf)
+            .map_err(|e| Alert::internal_error(format!("Failed reading bytes: {}", e)))?;
 
         let mut iter = header_buf.into_iter();
 
@@ -148,9 +169,7 @@ impl TLSCiphertext {
         connection
             .stream
             .read_exact(fragment_buf.as_mut_slice())
-            .map_err(|e| {
-                Alert::internal_error(format!("Failed reading bytes: {}", e))
-            })?;
+            .map_err(|e| Alert::internal_error(format!("Failed reading bytes: {}", e)))?;
 
         let current_read = &connection.connection_states.current_read;
 
@@ -169,6 +188,7 @@ impl TLSCiphertext {
         Ok(Self {
             content_type,
             version,
+            length,
             fragment,
         })
     }
@@ -183,7 +203,9 @@ impl TLSCiphertext {
         let length = frag_buffer.len();
 
         if length > 18432 {
-            return Err(Alert::internal_error("Length of TLSCiphertext out of bounds"));
+            return Err(Alert::internal_error(
+                "Length of TLSCiphertext out of bounds",
+            ));
         }
 
         let length = length as u16;

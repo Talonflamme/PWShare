@@ -63,14 +63,18 @@ pub(super) fn block_encrypt(
         padding_length,
     };
 
+    let encrypted = cipher.encrypt_struct(inner, &iv)?;
+    let length = (encrypted.bytes.len() + record_iv_len) as u16;
+
     let generic_block_cipher = GenericBlockCipher {
-        inner: cipher.encrypt_struct(inner, &iv)?,
+        inner: encrypted,
         iv,
     };
 
     Ok(TLSCiphertext {
         content_type: plaintext.content_type,
         version: plaintext.version,
+        length,
         fragment: CipherType::Block(generic_block_cipher),
     })
 }
@@ -103,6 +107,7 @@ pub(super) fn block_decrypt(
     let tls_compressed = TLSCompressed {
         content_type: ciphertext.content_type,
         version: ciphertext.version,
+        length: fragment_bytes.len() as u16,
         fragment: fragment_bytes,
     };
 

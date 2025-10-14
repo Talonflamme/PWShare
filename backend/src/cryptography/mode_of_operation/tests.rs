@@ -48,8 +48,8 @@ pub fn test_encrypt_aead<K: AESKey, M: AeadModeOfOperation>(
     let aad_owner = aad.map(hex_to_u8_vec);
     let aad = aad_owner.as_deref();
 
-    let cipher = AESCipherAead::new(key, mode);
-    let (ciphertext, tag) = cipher.encrypt(plain.as_slice(), aad);
+    let cipher = AESCipherAead::new(key);
+    let (ciphertext, tag) = cipher.encrypt(plain.as_slice(), aad, &mode);
 
     assert_eq!(ciphertext, expected_ciphertext);
     assert_eq!(tag, expected_tag);
@@ -88,8 +88,8 @@ pub fn test_decrypt_aead<K: AESKey, M: AeadModeOfOperation>(
     let aad_owner = aad.map(hex_to_u8_vec);
     let aad = aad_owner.as_deref();
 
-    let cipher = AESCipherAead::new(key, mode);
-    let plaintext = cipher.decrypt(ciphertext.as_slice(), aad, received_tag);
+    let cipher = AESCipherAead::new(key);
+    let plaintext = cipher.decrypt(ciphertext.as_slice(), aad, received_tag, &mode);
 
     assert_eq!(expected_plaintext, plaintext);
 }

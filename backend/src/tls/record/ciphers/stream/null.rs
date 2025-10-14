@@ -2,7 +2,9 @@ use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::record::alert::Alert;
 use crate::tls::record::ciphers::cipher::TLSCipher;
 use crate::tls::record::cryptographic_attributes::StreamCiphered;
-use crate::tls::record::fragmentation::tls_ciphertext::{CipherType, GenericStreamCipher, TLSCiphertext};
+use crate::tls::record::fragmentation::tls_ciphertext::{
+    CipherType, GenericStreamCipher, TLSCiphertext,
+};
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 
@@ -40,9 +42,12 @@ impl TLSCipher for TLSNullCipher {
             mac,
         };
 
+        let length = (generic_stream_cipher.content.len() + generic_stream_cipher.mac.len()) as u16;
+
         Ok(TLSCiphertext {
             content_type: plaintext.content_type,
             version: plaintext.version,
+            length,
             fragment: CipherType::Stream(self.encrypt_struct(generic_stream_cipher)?),
         })
     }
@@ -54,7 +59,11 @@ impl TLSCipher for TLSNullCipher {
     ) -> crate::tls::record::alert::Result<TLSCompressed> {
         let frag = match ciphertext.fragment {
             CipherType::Stream(s) => s,
-            _ => return Err(Alert::internal_error("called TLSStreamCipher.decrypt on something other than StreamCiphered")),
+            _ => {
+                return Err(Alert::internal_error(
+                    "called TLSStreamCipher.decrypt on something other than StreamCiphered",
+                ))
+            }
         };
 
         let generic_stream_cipher = self.decrypt_struct(frag, con_state)?;
@@ -66,6 +75,7 @@ impl TLSCipher for TLSNullCipher {
         let compressed: TLSCompressed = TLSCompressed {
             content_type: ciphertext.content_type,
             version: ciphertext.version,
+            length: fragment.len() as u16,
             fragment,
         };
 

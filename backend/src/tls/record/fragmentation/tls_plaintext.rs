@@ -10,7 +10,7 @@ use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Formatter};
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, Eq, ReadableFromStream, WritableToSink)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ReadableFromStream, WritableToSink)]
 pub enum ContentType {
     ChangeCipherSpec = 20, // 0x14
     Alert = 21,            // 0x15
@@ -39,9 +39,8 @@ impl Into<ContentType> for &ContentTypeWithContent {
 pub struct TLSPlaintext {
     pub(crate) content_type: ContentType,
     pub(crate) version: ProtocolVersion,
-    // normally, here is a `length: u16` field, but that length is the length
-    // for `fragment` and we simply use a VariableLengthVec as parsing is made
-    // easier and the stored bytes are the same
+    /// Length of the following `.fragment`
+    pub(crate) length: u16,
     pub(crate) fragment: VariableLengthVec<u8, 0, 16384>, // 2^14
 }
 
@@ -71,12 +70,12 @@ impl TLSPlaintext {
         };
 
         let fragment: VariableLengthVec<u8, 0, 16384> = bytes.into();
-
         (&fragment).check_bounds()?;
 
         Ok(Self {
             content_type,
             version,
+            length: fragment.len() as u16,
             fragment,
         })
     }
@@ -148,11 +147,14 @@ impl TLSPlaintext {
     /// This function does the opposite of `TLSCompressed.decompress()`.
     pub fn compress(self, con_state: &ConnectionState) -> Result<TLSCompressed> {
         let compression = con_state.parameters.compression_algorithm()?;
+        
+        let fragment = compression.compress(self.fragment)?;
 
         Ok(TLSCompressed {
             content_type: self.content_type,
             version: self.version,
-            fragment: compression.compress(self.fragment)?,
+            length: fragment.len() as u16,
+            fragment,
         })
     }
 }
