@@ -1,8 +1,10 @@
+use super::ecdhe::elliptic_curve::ServerECDHParams;
 use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::ciphers::cipher_suite::CipherConfig;
+use crate::tls::record::ciphers::key_exchange_algorithm::KeyExchangeAlgorithm;
+use crate::tls::record::signature::Signature;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use pwshare_macros::{ReadableFromStream, WritableToSink};
-use crate::tls::record::ciphers::cipher_suite::CipherConfig;
-use super::ecdhe::elliptic_curve::ServerECDHParams;
 
 #[derive(Debug)]
 pub enum ServerKeyExchange {
@@ -10,13 +12,18 @@ pub enum ServerKeyExchange {
 }
 
 impl ReadableFromStream for ServerKeyExchange {
-    fn read(_: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
-        // In order to actually read this, we would need to change the
-        // `ReadableFromStream` trait to somehow know about the KeyExchangeAlgorithm,
-        // which is used. This change is not necessary though, since we only implement
-        // the server and the Client will never send it. Therefore, we will never have to read
-        // it.
-        Err(Alert::internal_error("Can't read `ServerKeyExchange`"))
+    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
+        let s = suite.ok_or(Alert::internal_error(
+            "Reading Signature when no cipher suite is negotiated",
+        ))?;
+
+        match s.key_exchange {
+            KeyExchangeAlgorithm::Null => Err(Alert::unexpected_message()),
+            KeyExchangeAlgorithm::Rsa => Err(Alert::unexpected_message()),
+            KeyExchangeAlgorithm::Ecdhe => Ok(ServerKeyExchange::EcDiffieHellman(
+                ServerKeyExchangeEcDiffieHellman::read(stream, suite)?,
+            )),
+        }
     }
 }
 
@@ -32,21 +39,4 @@ impl WritableToSink for ServerKeyExchange {
 pub struct ServerKeyExchangeEcDiffieHellman {
     pub params: ServerECDHParams,
     pub signed_params: Signature,
-}
-
-#[derive(Debug)]
-pub struct Signature {
-    bytes: Vec<u8>,
-}
-
-impl ReadableFromStream for Signature {
-    fn read(stream: &mut impl Iterator<Item=u8>, _: Option<&CipherConfig>) -> Result<Self> {
-        todo!()
-    }
-}
-
-impl WritableToSink for Signature {
-    fn write(&self, buffer: &mut impl Sink<u8>, _: Option<&CipherConfig>) -> Result<()> {
-        todo!()
-    }
 }

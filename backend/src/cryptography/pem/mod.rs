@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
 
-mod asn1der;
+pub mod asn1der;
 pub mod base64;
 mod pem;
 

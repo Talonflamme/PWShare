@@ -1,7 +1,9 @@
 mod public_key_encrypted;
+mod digitally_signed;
 
 use std::marker::PhantomData;
 pub use public_key_encrypted::PublicKeyEncrypted;
+pub use digitally_signed::DigitallySigned;
 
 macro_rules! impl_ciphered {
     ($typ: ident) => {

@@ -50,11 +50,11 @@ fn encode_integer(integer: i64) -> Vec<u8> {
     result
 }
 
-fn encode_null() -> Vec<u8> {
+pub fn encode_null() -> Vec<u8> {
     vec![0x05, 0x00]
 }
 
-fn decode_null(iter: &mut impl Iterator<Item = u8>) -> Result<(), &'static str> {
+pub fn decode_null(iter: &mut impl Iterator<Item = u8>) -> Result<(), &'static str> {
     let tag = iter.next().ok_or("EOF, 0x05 expected")?;
 
     if tag != 0x05 {
@@ -94,7 +94,7 @@ fn encode_big_integer(integer: &BigUint) -> Vec<u8> {
     result
 }
 
-fn encode_sequence(mut sequence: Vec<u8>) -> Vec<u8> {
+pub fn encode_sequence(mut sequence: Vec<u8>) -> Vec<u8> {
     let mut result = Vec::new();
 
     // Tag
@@ -107,7 +107,7 @@ fn encode_sequence(mut sequence: Vec<u8>) -> Vec<u8> {
     result
 }
 
-fn encode_octet_string(mut string: Vec<u8>) -> Vec<u8> {
+pub fn encode_octet_string(mut string: Vec<u8>) -> Vec<u8> {
     let mut result = Vec::new();
 
     result.push(0x04); // Tag: Octet String
@@ -118,7 +118,7 @@ fn encode_octet_string(mut string: Vec<u8>) -> Vec<u8> {
     result
 }
 
-fn encode_bit_string(mut string: Vec<u8>) -> Vec<u8> {
+pub fn encode_bit_string(mut string: Vec<u8>) -> Vec<u8> {
     let mut result = Vec::new();
 
     result.push(0x03); // Tag: Bit String
@@ -130,7 +130,7 @@ fn encode_bit_string(mut string: Vec<u8>) -> Vec<u8> {
     result
 }
 
-fn encode_object_identifier(components: &[u32]) -> Vec<u8> {
+pub fn encode_object_identifier(components: &[u32]) -> Vec<u8> {
     let mut result = Vec::new();
 
     result.push(0x06); // Tag: Object Identifier
@@ -169,7 +169,7 @@ fn encode_object_identifier(components: &[u32]) -> Vec<u8> {
     result
 }
 
-fn decode_object_identifier(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u32>, &'static str> {
+pub fn decode_object_identifier(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u32>, &'static str> {
     let tag = iter.next().ok_or("Expected 0x06, got none")?;
 
     if tag != 0x06 {
@@ -286,7 +286,7 @@ fn decode_big_integer(iter: &mut impl Iterator<Item = u8>) -> Result<BigUint, &'
     Ok(BigUint::from_bytes_be(&bytes))
 }
 
-fn decode_sequence(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u8>, &'static str> {
+pub fn decode_sequence(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u8>, &'static str> {
     let tag = iter.next().ok_or("0x30 expected, none found")?;
 
     if tag != 0x30 {
@@ -303,7 +303,7 @@ fn decode_sequence(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u8>, &'sta
     }
 }
 
-fn decode_octet_string(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u8>, &'static str> {
+pub fn decode_octet_string(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u8>, &'static str> {
     let tag = iter.next().ok_or("0x04 expected, none found")?;
 
     if tag != 0x04 {
@@ -320,7 +320,7 @@ fn decode_octet_string(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u8>, &
     }
 }
 
-fn decode_bit_string(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u8>, &'static str> {
+pub fn decode_bit_string(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u8>, &'static str> {
     let tag = iter.next().ok_or("0x03 expected, none found")?;
 
     if tag != 0x03 {

@@ -105,4 +105,4 @@ fn test_cipher_suite(cipher_suite: CipherSuite, index: usize) {
     assert!(output.status.success());
 }
 
-generate_cipher_suite_tests!(SUPPORTED_CIPHER_SUITES, 5);
+generate_cipher_suite_tests!(SUPPORTED_CIPHER_SUITES, 7);

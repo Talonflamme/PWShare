@@ -61,6 +61,8 @@ impl PrivateKey {
         Self::new_detailed(n, d, e, p, q, exp1, exp2, inv)
     }
 
+    /// Computes `M^d (mod n)` and returns the result or an error if `M` was outside of 
+    /// range.
     pub fn decrypt(&self, message_cipher: BigUint) -> Result<BigUint, DecryptError> {
         if self.n <= message_cipher {
             Err(DecryptError {

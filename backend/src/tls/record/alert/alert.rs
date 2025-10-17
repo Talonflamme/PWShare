@@ -2,10 +2,16 @@ use super::alert_description::AlertDescription;
 use super::alert_level::AlertLevel;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 
-#[derive(ReadableFromStream, WritableToSink, Debug)]
+#[derive(ReadableFromStream, WritableToSink, Debug, Clone)]
 pub struct Alert {
     level: AlertLevel,
     description: AlertDescription,
+}
+
+impl From<&Alert> for Alert {
+    fn from(value: &Alert) -> Self {
+        value.clone()
+    }
 }
 
 impl Alert {

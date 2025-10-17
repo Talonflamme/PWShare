@@ -3,7 +3,7 @@ use crate::tls::connection_state::prf::PRFAlgorithm;
 use crate::tls::connection_state::security_parameters::{BulkCipherAlgorithm, SecurityParameters};
 use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::ciphers::key_exchange_algorithm::KeyExchangeAlgorithm;
-use crate::tls::record::signature::SignatureAlgorithm;
+use crate::tls::record::signature::{HashAlgorithm, SignatureAlgorithm};
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use pwshare_macros::{FromRepr, IntoRepr};
 // TODO: add more (modern) ciphers
@@ -92,6 +92,7 @@ pub struct CipherConfig {
     pub signature: SignatureAlgorithm,
     pub cipher: BulkCipherAlgorithm,
     pub mac: MACAlgorithm,
+    pub hash: HashAlgorithm,
     pub prf: PRFAlgorithm,
     /// size of key in bytes
     pub key_length: u8,
@@ -105,6 +106,7 @@ impl CipherSuite {
                 signature: SignatureAlgorithm::Anonymous,
                 cipher: BulkCipherAlgorithm::Null,
                 mac: MACAlgorithm::Null,
+                hash: HashAlgorithm::None,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 0,
             }),
@@ -113,6 +115,7 @@ impl CipherSuite {
                 signature: SignatureAlgorithm::RSA,
                 cipher: BulkCipherAlgorithm::Aes256Cbc,
                 mac: MACAlgorithm::HMacSha256,
+                hash: HashAlgorithm::Sha256,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 32,
             }),
@@ -121,6 +124,7 @@ impl CipherSuite {
                 signature: SignatureAlgorithm::RSA,
                 cipher: BulkCipherAlgorithm::Aes256Cbc,
                 mac: MACAlgorithm::HMacSha1,
+                hash: HashAlgorithm::Sha1,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 32,
             }),
@@ -129,6 +133,7 @@ impl CipherSuite {
                 signature: SignatureAlgorithm::RSA,
                 cipher: BulkCipherAlgorithm::Aes128Cbc,
                 mac: MACAlgorithm::HMacSha256,
+                hash: HashAlgorithm::Sha256,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 16,
             }),
@@ -137,6 +142,7 @@ impl CipherSuite {
                 signature: SignatureAlgorithm::RSA,
                 cipher: BulkCipherAlgorithm::Aes128Cbc,
                 mac: MACAlgorithm::HMacSha1,
+                hash: HashAlgorithm::Sha1,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 16,
             }),
@@ -145,6 +151,7 @@ impl CipherSuite {
                 signature: SignatureAlgorithm::RSA,
                 cipher: BulkCipherAlgorithm::Aes128Gcm,
                 mac: MACAlgorithm::HMacSha256,
+                hash: HashAlgorithm::Sha256,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 16,
             }),
@@ -153,6 +160,7 @@ impl CipherSuite {
                 signature: SignatureAlgorithm::RSA,
                 cipher: BulkCipherAlgorithm::Aes256Gcm,
                 mac: MACAlgorithm::HMacSha384,
+                hash: HashAlgorithm::Sha384,
                 prf: PRFAlgorithm::TlsPrfSha384,
                 key_length: 32,
             }),
@@ -161,6 +169,7 @@ impl CipherSuite {
                 signature: SignatureAlgorithm::RSA,
                 cipher: BulkCipherAlgorithm::Aes128Cbc,
                 mac: MACAlgorithm::HMacSha256,
+                hash: HashAlgorithm::Sha256,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 16,
             }),

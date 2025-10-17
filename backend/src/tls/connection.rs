@@ -20,9 +20,17 @@ use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::{ClientKeyExchange, Finished, Handshake, HandshakeType, Random};
 use crate::tls::tls_main::IOErrorOrTLSError;
 use crate::tls::WritableToSink;
+use once_cell::sync::Lazy;
 use std::fs;
 use std::io::{Error, ErrorKind, Write};
 use std::net::TcpStream;
+
+pub static RSA_KEY: Lazy<Result<PrivateKey>> = Lazy::new(|| {
+    let key_content = fs::read_to_string("key.pem")
+        .map_err(|e| Alert::internal_error(format!("Error reading key file: {}", e)))?;
+    PrivateKey::from_pem_content(key_content)
+        .map_err(|e| Alert::internal_error(format!("Error parsing .pem file: {}", e)))
+});
 
 pub(crate) struct ConnectionStates {
     pub(crate) current_read: ConnectionState,
@@ -309,15 +317,10 @@ impl Connection {
         &mut self,
         client_key_exchange: ClientKeyExchange,
     ) -> Result<PreMasterSecret> {
-        let key_content = fs::read_to_string("key.pem")
-            .map_err(|e| Alert::internal_error(format!("Error reading key file: {}", e)))?;
-        let key = PrivateKey::from_pem_content(key_content)
-            .map_err(|e| Alert::internal_error(format!("Error parsing .pem file: {}", e)))?;
-
-        client_key_exchange
-            .exchange_keys
-            .pre_master_secret
-            .decrypt(move |bytes| {
+        let key = RSA_KEY.as_ref()?;
+        
+        client_key_exchange.exchange_keys.pre_master_secret.decrypt(
+            move |bytes| {
                 let padded = key
                     .decrypt_bytes(bytes.as_slice())
                     .map_err(|_| Alert::decrypt_error())?;
@@ -326,7 +329,9 @@ impl Connection {
                     .map_err(|_| Alert::decrypt_error())?;
 
                 Ok(message)
-            }, self.cipher_suite.as_ref())
+            },
+            self.cipher_suite.as_ref(),
+        )
     }
 
     fn convert_pre_master_to_master(
