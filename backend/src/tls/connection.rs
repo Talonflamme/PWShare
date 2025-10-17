@@ -8,6 +8,8 @@ use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::certificate::{ASN1Cert, Certificate};
 use crate::tls::record::change_cipher_spec::ChangeCipherSpec;
 use crate::tls::record::ciphers::cipher_suite;
+use crate::tls::record::ciphers::cipher_suite::CipherSuite;
+use crate::tls::record::ciphers::key_exchange_algorithm::KeyExchangeAlgorithm;
 use crate::tls::record::fragmentation::tls_ciphertext::TLSCiphertext;
 use crate::tls::record::fragmentation::tls_plaintext::{ContentTypeWithContent, TLSPlaintext};
 use crate::tls::record::hello::extensions::{Extension, ExtensionType, RenegotiationInfoExtension};
@@ -79,6 +81,9 @@ pub struct Connection {
     pub(crate) stream: TcpStream,
     /// The current/pending read/write states
     pub(crate) connection_states: ConnectionStates,
+    /// Which `CipherSuite` was negotiated. If the handshake is not far enough (before `ServerHello`
+    /// this will be `None`.
+    cipher_suite: Option<CipherSuite>,
     /// All handshake messages concatenated. This does not include HelloRequest and the next message
     /// (Finished) but all others in order.
     handshake_messages: Vec<u8>,
@@ -100,6 +105,7 @@ impl Connection {
         Connection {
             stream,
             connection_states: states,
+            cipher_suite: None,
             handshake_messages: Vec::new(),
             is_closed: false,
             is_handshake_done: true,
@@ -158,6 +164,8 @@ impl Connection {
         let cipher_suite = cipher_suite::select_cipher_suite(&client_hello.cipher_suites)?;
         let mut extensions = extensions::filter_extensions(&client_hello.extensions);
 
+        self.cipher_suite = Some(cipher_suite);
+
         cipher_suite.set_security_params(&mut self.connection_states.pending_parameters)?;
 
         extensions.push(Extension {
@@ -202,6 +210,10 @@ impl Connection {
         self.send_fragment(ContentTypeWithContent::Handshake(handshake))
     }
 
+    fn send_server_key_exchange(&mut self) -> Result<Vec<u8>> {
+        Ok(Vec::new())
+    }
+
     fn send_server_hello_done(&mut self) -> Result<Vec<u8>> {
         let server_hello_done = ServerHelloDone {};
 
@@ -218,6 +230,19 @@ impl Connection {
 
         bytes = self.send_certificate()?;
         self.handshake_messages.append(&mut bytes);
+
+        let cipher_suite = self.cipher_suite.as_ref().unwrap().config()?;
+
+        match cipher_suite.key_exchange {
+            KeyExchangeAlgorithm::Null => {
+                return Err(Alert::internal_error("Null for key exchange negotiated"))
+            }
+            KeyExchangeAlgorithm::Rsa => {} // no ServerKeyExchange needed
+            KeyExchangeAlgorithm::Ecdhe => {
+                bytes = self.send_server_key_exchange()?;
+                self.handshake_messages.append(&mut bytes);
+            }
+        }
 
         bytes = self.send_server_hello_done()?;
         self.handshake_messages.append(&mut bytes);

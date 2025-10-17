@@ -3,9 +3,9 @@ use crate::tls::connection_state::prf::PRFAlgorithm;
 use crate::tls::connection_state::security_parameters::{BulkCipherAlgorithm, SecurityParameters};
 use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::ciphers::key_exchange_algorithm::KeyExchangeAlgorithm;
+use crate::tls::record::signature::SignatureAlgorithm;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use pwshare_macros::{FromRepr, IntoRepr};
-
 // TODO: add more (modern) ciphers
 
 #[repr(u16)]
@@ -59,6 +59,8 @@ pub enum CipherSuite {
     TlsRsaWithAes128GcmSha256 = 0x009c,
     TlsRsaWithAes256GcmSha384 = 0x009d,
 
+    TlsEcdheRsaWithAes128CbcSha256 = 0xc027,
+
     Unknown = 0xFFFF,
 }
 
@@ -87,6 +89,7 @@ impl WritableToSink for CipherSuite {
 #[derive(Debug, Clone, Copy)]
 pub struct CipherConfig {
     pub key_exchange: KeyExchangeAlgorithm,
+    pub signature: SignatureAlgorithm,
     pub cipher: BulkCipherAlgorithm,
     pub mac: MACAlgorithm,
     pub prf: PRFAlgorithm,
@@ -99,6 +102,7 @@ impl CipherSuite {
         match self {
             CipherSuite::TlsNullWithNullNull => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Null,
+                signature: SignatureAlgorithm::Anonymous,
                 cipher: BulkCipherAlgorithm::Null,
                 mac: MACAlgorithm::Null,
                 prf: PRFAlgorithm::TlsPrfSha256,
@@ -106,6 +110,7 @@ impl CipherSuite {
             }),
             CipherSuite::TlsRsaWithAes256CbcSha256 => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
+                signature: SignatureAlgorithm::RSA,
                 cipher: BulkCipherAlgorithm::Aes256Cbc,
                 mac: MACAlgorithm::HMacSha256,
                 prf: PRFAlgorithm::TlsPrfSha256,
@@ -113,6 +118,7 @@ impl CipherSuite {
             }),
             CipherSuite::TlsRsaWithAes256CbcSha => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
+                signature: SignatureAlgorithm::RSA,
                 cipher: BulkCipherAlgorithm::Aes256Cbc,
                 mac: MACAlgorithm::HMacSha1,
                 prf: PRFAlgorithm::TlsPrfSha256,
@@ -120,6 +126,7 @@ impl CipherSuite {
             }),
             CipherSuite::TlsRsaWithAes128CbcSha256 => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
+                signature: SignatureAlgorithm::RSA,
                 cipher: BulkCipherAlgorithm::Aes128Cbc,
                 mac: MACAlgorithm::HMacSha256,
                 prf: PRFAlgorithm::TlsPrfSha256,
@@ -127,6 +134,7 @@ impl CipherSuite {
             }),
             CipherSuite::TlsRsaWithAes128CbcSha => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
+                signature: SignatureAlgorithm::RSA,
                 cipher: BulkCipherAlgorithm::Aes128Cbc,
                 mac: MACAlgorithm::HMacSha1,
                 prf: PRFAlgorithm::TlsPrfSha256,
@@ -134,6 +142,7 @@ impl CipherSuite {
             }),
             CipherSuite::TlsRsaWithAes128GcmSha256 => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
+                signature: SignatureAlgorithm::RSA,
                 cipher: BulkCipherAlgorithm::Aes128Gcm,
                 mac: MACAlgorithm::HMacSha256,
                 prf: PRFAlgorithm::TlsPrfSha256,
@@ -141,10 +150,19 @@ impl CipherSuite {
             }),
             CipherSuite::TlsRsaWithAes256GcmSha384 => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
+                signature: SignatureAlgorithm::RSA,
                 cipher: BulkCipherAlgorithm::Aes256Gcm,
                 mac: MACAlgorithm::HMacSha384,
                 prf: PRFAlgorithm::TlsPrfSha384,
                 key_length: 32,
+            }),
+            CipherSuite::TlsEcdheRsaWithAes128CbcSha256 => Ok(CipherConfig {
+                key_exchange: KeyExchangeAlgorithm::Ecdhe,
+                signature: SignatureAlgorithm::RSA,
+                cipher: BulkCipherAlgorithm::Aes128Cbc,
+                mac: MACAlgorithm::HMacSha256,
+                prf: PRFAlgorithm::TlsPrfSha256,
+                key_length: 16,
             }),
             _ => Err(Alert::internal_error("Unsupported cipher was negotiated")), // should not occur
         }
@@ -164,7 +182,8 @@ impl CipherSuite {
 
 /// A list of Cipher Suites, that are supported by this server. They in order of preference
 /// in descending order (most preferable first).
-pub const SUPPORTED_CIPHER_SUITES: [CipherSuite; 6] = [
+pub const SUPPORTED_CIPHER_SUITES: [CipherSuite; 7] = [
+    CipherSuite::TlsEcdheRsaWithAes128CbcSha256,
     CipherSuite::TlsRsaWithAes256GcmSha384,
     CipherSuite::TlsRsaWithAes128GcmSha256,
     CipherSuite::TlsRsaWithAes256CbcSha256,

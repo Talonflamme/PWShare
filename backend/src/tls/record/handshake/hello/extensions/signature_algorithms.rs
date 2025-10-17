@@ -1,6 +1,6 @@
-use pwshare_macros::{ReadableFromStream, WritableToSink};
-use crate::tls::record::handshake::hello::signature::SignatureAndHashAlgorithm;
+use crate::tls::record::signature::SignatureAndHashAlgorithm;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
+use pwshare_macros::{ReadableFromStream, WritableToSink};
 
 #[derive(Debug, ReadableFromStream, WritableToSink)]
 pub struct SignatureAlgorithmsExtension {
