@@ -8,7 +8,7 @@ use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::certificate::{ASN1Cert, Certificate};
 use crate::tls::record::change_cipher_spec::ChangeCipherSpec;
 use crate::tls::record::ciphers::cipher_suite;
-use crate::tls::record::ciphers::cipher_suite::CipherSuite;
+use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::record::ciphers::key_exchange_algorithm::KeyExchangeAlgorithm;
 use crate::tls::record::fragmentation::tls_ciphertext::TLSCiphertext;
 use crate::tls::record::fragmentation::tls_plaintext::{ContentTypeWithContent, TLSPlaintext};
@@ -19,6 +19,7 @@ use crate::tls::record::key_exchange::rsa::PreMasterSecret;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::{ClientKeyExchange, Finished, Handshake, HandshakeType, Random};
 use crate::tls::tls_main::IOErrorOrTLSError;
+use crate::tls::WritableToSink;
 use std::fs;
 use std::io::{Error, ErrorKind, Write};
 use std::net::TcpStream;
@@ -83,7 +84,7 @@ pub struct Connection {
     pub(crate) connection_states: ConnectionStates,
     /// Which `CipherSuite` was negotiated. If the handshake is not far enough (before `ServerHello`
     /// this will be `None`.
-    cipher_suite: Option<CipherSuite>,
+    pub(crate) cipher_suite: Option<CipherConfig>,
     /// All handshake messages concatenated. This does not include HelloRequest and the next message
     /// (Finished) but all others in order.
     handshake_messages: Vec<u8>,
@@ -125,7 +126,7 @@ impl Connection {
         let plaintext = self.read_fragment()?;
 
         let bytes = plaintext.fragment.clone();
-        let handshake = plaintext.get_handshake()?;
+        let handshake = plaintext.get_handshake(self.cipher_suite.as_ref())?;
 
         Ok((handshake, bytes))
     }
@@ -164,7 +165,7 @@ impl Connection {
         let cipher_suite = cipher_suite::select_cipher_suite(&client_hello.cipher_suites)?;
         let mut extensions = extensions::filter_extensions(&client_hello.extensions);
 
-        self.cipher_suite = Some(cipher_suite);
+        self.cipher_suite = Some(cipher_suite.config()?);
 
         cipher_suite.set_security_params(&mut self.connection_states.pending_parameters)?;
 
@@ -231,7 +232,7 @@ impl Connection {
         bytes = self.send_certificate()?;
         self.handshake_messages.append(&mut bytes);
 
-        let cipher_suite = self.cipher_suite.as_ref().unwrap().config()?;
+        let cipher_suite = self.cipher_suite.as_ref().unwrap();
 
         match cipher_suite.key_exchange {
             KeyExchangeAlgorithm::Null => {
@@ -280,7 +281,11 @@ impl Connection {
     /// Sends the `content`, adds a header and encrypts the message. Returns the bytes of the
     /// handshake message (without header).
     fn send_fragment(&mut self, content: ContentTypeWithContent) -> Result<Vec<u8>> {
-        let tls_plaintext = TLSPlaintext::new(content, ProtocolVersion::tls1_2())?;
+        let tls_plaintext = TLSPlaintext::new(
+            content,
+            ProtocolVersion::tls1_2(),
+            self.cipher_suite.as_ref(),
+        )?;
 
         let handshake_bytes = tls_plaintext.fragment.clone();
 
@@ -288,7 +293,7 @@ impl Connection {
         let tls_ciphertext = tls_compressed.encrypt(&self.connection_states.current_write)?;
 
         let mut bytes: Vec<u8> = Vec::new();
-        tls_ciphertext.write(&mut bytes)?;
+        tls_ciphertext.write(&mut bytes, self.cipher_suite.as_ref())?;
 
         self.stream
             .write_all(bytes.as_slice())
@@ -321,7 +326,7 @@ impl Connection {
                     .map_err(|_| Alert::decrypt_error())?;
 
                 Ok(message)
-            })
+            }, self.cipher_suite.as_ref())
     }
 
     fn convert_pre_master_to_master(

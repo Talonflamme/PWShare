@@ -65,15 +65,15 @@ pub enum CipherSuite {
 }
 
 impl ReadableFromStream for CipherSuite {
-    fn read(stream: &mut impl Iterator<Item = u8>) -> Result<Self> {
-        let u = u16::read(stream)?;
+    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
+        let u = u16::read(stream, suite)?;
 
         Ok(Self::try_from(u).unwrap_or(Self::Unknown))
     }
 }
 
 impl WritableToSink for CipherSuite {
-    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
         if matches!(self, CipherSuite::Unknown) {
             return Err(Alert::internal_error(
                 "Unknown cipher suite cannot be written",
@@ -82,7 +82,7 @@ impl WritableToSink for CipherSuite {
 
         let v: u16 = self.into();
 
-        v.write(buffer)
+        v.write(buffer, suite)
     }
 }
 

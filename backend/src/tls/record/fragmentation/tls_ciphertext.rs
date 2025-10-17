@@ -8,6 +8,7 @@ use crate::tls::record::fragmentation::tls_plaintext::ContentType;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use std::io::Read;
+use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 
 pub(crate) struct GenericStreamCipher {
     pub content: Vec<u8>,
@@ -53,7 +54,7 @@ impl GenericBlockCipher {
 }
 
 impl WritableToSink for GenericBlockCipher {
-    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, _: Option<&CipherConfig>) -> Result<()> {
         buffer.extend_from_slice(self.iv.as_slice());
         buffer.extend_from_slice(self.inner.bytes.as_slice());
         Ok(())
@@ -105,7 +106,7 @@ impl GenericAEADCipher {
 }
 
 impl WritableToSink for GenericAEADCipher {
-    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, _: Option<&CipherConfig>) -> Result<()> {
         buffer.extend_from_slice(&self.nonce_explicit);
         buffer.extend_from_slice(&self.content.bytes);
         Ok(())
@@ -119,13 +120,13 @@ pub(crate) enum CipherType {
 }
 
 impl WritableToSink for CipherType {
-    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
         // here, we do not include a discriminant before, since
         // the variant depends on SecurityParameters.cipher_type
         match self {
             CipherType::Stream(gsc) => buffer.extend_from_slice(&gsc.bytes),
-            CipherType::Block(gbc) => gbc.write(buffer)?,
-            CipherType::Aead(gac) => gac.write(buffer)?,
+            CipherType::Block(gbc) => gbc.write(buffer, suite)?,
+            CipherType::Aead(gac) => gac.write(buffer, suite)?,
         }
 
         Ok(())
@@ -146,19 +147,19 @@ pub fn encrypt(compressed: TLSCompressed, con_state: &ConnectionState) -> Result
 }
 
 impl TLSCiphertext {
-    pub fn read_from_connection(connection: &mut Connection) -> Result<Self> {
+    pub fn read_from_connection(con: &mut Connection) -> Result<Self> {
         // Header contains 5 bytes
         let mut header_buf = [0u8; 5];
-        connection
+        con
             .stream
             .read_exact(&mut header_buf)
             .map_err(|e| Alert::internal_error(format!("Failed reading bytes: {}", e)))?;
 
         let mut iter = header_buf.into_iter();
 
-        let content_type = ContentType::read(&mut iter)?;
-        let version = ProtocolVersion::read(&mut iter)?;
-        let length = u16::read(&mut iter)?;
+        let content_type = ContentType::read(&mut iter, con.cipher_suite.as_ref())?;
+        let version = ProtocolVersion::read(&mut iter, con.cipher_suite.as_ref())?;
+        let length = u16::read(&mut iter, con.cipher_suite.as_ref())?;
 
         // length must not exceed 2^14 + 2048
         if length > 18432 {
@@ -166,12 +167,12 @@ impl TLSCiphertext {
         }
 
         let mut fragment_buf = vec![0; length as usize];
-        connection
+        con
             .stream
             .read_exact(fragment_buf.as_mut_slice())
             .map_err(|e| Alert::internal_error(format!("Failed reading bytes: {}", e)))?;
 
-        let current_read = &connection.connection_states.current_read;
+        let current_read = &con.connection_states.current_read;
 
         let fragment = match current_read.parameters.cipher_type()? {
             security_parameters::CipherType::Stream => {
@@ -193,12 +194,18 @@ impl TLSCiphertext {
         })
     }
 
-    pub fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
-        self.content_type.write(buffer)?; // .type
-        self.version.write(buffer)?; // .version
+    pub fn decrypt(self, con_state: &ConnectionState) -> Result<TLSCompressed> {
+        con_state.cipher.decrypt(self, con_state)
+    }
+}
+
+impl WritableToSink for TLSCiphertext {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
+        self.content_type.write(buffer, suite)?; // .type
+        self.version.write(buffer, suite)?; // .version
 
         let mut frag_buffer: Vec<u8> = Vec::new();
-        self.fragment.write(&mut frag_buffer)?;
+        self.fragment.write(&mut frag_buffer, suite)?;
 
         let length = frag_buffer.len();
 
@@ -209,13 +216,9 @@ impl TLSCiphertext {
         }
 
         let length = length as u16;
-        length.write(buffer)?; // .length
+        length.write(buffer, suite)?; // .length
         buffer.append(frag_buffer); // .fragment
 
         Ok(())
-    }
-
-    pub fn decrypt(self, con_state: &ConnectionState) -> Result<TLSCompressed> {
-        con_state.cipher.decrypt(self, con_state)
     }
 }

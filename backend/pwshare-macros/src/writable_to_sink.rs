@@ -10,7 +10,7 @@ fn impl_writable_to_sink_struct(data_struct: &DataStruct) -> TokenStream {
                 let ident = f.ident.as_ref().unwrap();
                 let ty = &f.ty;
 
-                quote! { <#ty as crate::tls::WritableToSink>::write(&self.#ident , buffer)?; }
+                quote! { <#ty as crate::tls::WritableToSink>::write(&self.#ident , buffer, suite)?; }
             });
             quote! { #(#calls)* Ok(()) }
         }
@@ -18,7 +18,7 @@ fn impl_writable_to_sink_struct(data_struct: &DataStruct) -> TokenStream {
             let calls = fields.unnamed.iter().enumerate().map(|(i, f)| {
                 let ty = &f.ty;
                 let idx = syn::Index::from(i);
-                quote! { <#ty as crate::tls::WritableToSink>::write(&self.#idx , buffer)?; }
+                quote! { <#ty as crate::tls::WritableToSink>::write(&self.#idx , buffer, suite)?; }
             });
             quote! { #(#calls)* Ok(()) }
         }
@@ -61,7 +61,7 @@ fn impl_writable_to_sink_enum(data_enum: &DataEnum, ast: &DeriveInput) -> TokenS
 
             let ty = &field.ty;
             field_body
-                .push(quote! { <#ty as crate::tls::WritableToSink>::write(#field_i, buffer)? });
+                .push(quote! { <#ty as crate::tls::WritableToSink>::write(#field_i, buffer, suite)? });
         }
 
         let fields = if field_definition.is_empty() {
@@ -73,7 +73,7 @@ fn impl_writable_to_sink_enum(data_enum: &DataEnum, ast: &DeriveInput) -> TokenS
         };
 
         cases.push(quote! { #name::#variant_name #fields => {
-            <#repr as crate::tls::WritableToSink>::write(&#disc, buffer)?;
+            <#repr as crate::tls::WritableToSink>::write(&#disc, buffer, suite)?;
             #(#field_body);*
         } });
     }
@@ -105,7 +105,7 @@ pub fn impl_writable_to_sink(ast: DeriveInput) -> TokenStream {
 
     quote! {
         impl #generics crate::tls::WritableToSink for #name #generics #generics_where {
-            fn write(&self, buffer: &mut impl crate::tls::Sink<u8>) -> crate::tls::record::alert::Result<()> {
+            fn write(&self, buffer: &mut impl crate::tls::Sink<u8>, suite: Option<&crate::tls::record::ciphers::cipher_suite::CipherConfig>) -> crate::tls::record::alert::Result<()> {
                 #body
             }
         }

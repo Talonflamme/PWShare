@@ -1,6 +1,7 @@
 use crate::tls::record::alert::{Alert, Result};
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use pwshare_macros::{ReadableFromStream, WritableToSink};
+use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use super::ecdhe::elliptic_curve::ServerECDHParams;
 
 #[derive(Debug)]
@@ -9,7 +10,7 @@ pub enum ServerKeyExchange {
 }
 
 impl ReadableFromStream for ServerKeyExchange {
-    fn read(_: &mut impl Iterator<Item = u8>) -> Result<Self> {
+    fn read(_: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
         // In order to actually read this, we would need to change the
         // `ReadableFromStream` trait to somehow know about the KeyExchangeAlgorithm,
         // which is used. This change is not necessary though, since we only implement
@@ -20,9 +21,9 @@ impl ReadableFromStream for ServerKeyExchange {
 }
 
 impl WritableToSink for ServerKeyExchange {
-    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
         match self {
-            ServerKeyExchange::EcDiffieHellman(ecdh) => ecdh.write(buffer),
+            ServerKeyExchange::EcDiffieHellman(ecdh) => ecdh.write(buffer, suite),
         }
     }
 }
@@ -39,13 +40,13 @@ pub struct Signature {
 }
 
 impl ReadableFromStream for Signature {
-    fn read(stream: &mut impl Iterator<Item=u8>) -> Result<Self> {
+    fn read(stream: &mut impl Iterator<Item=u8>, _: Option<&CipherConfig>) -> Result<Self> {
         todo!()
     }
 }
 
 impl WritableToSink for Signature {
-    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, _: Option<&CipherConfig>) -> Result<()> {
         todo!()
     }
 }

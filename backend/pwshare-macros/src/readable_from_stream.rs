@@ -13,7 +13,7 @@ pub fn impl_readable_from_stream_trait(ast: DeriveInput) -> TokenStream {
                     let ident = f.ident.as_ref().unwrap();
                     let ty = &f.ty;
 
-                    quote! { #ident: <#ty as crate::tls::ReadableFromStream>::read(stream)? }
+                    quote! { #ident: <#ty as crate::tls::ReadableFromStream>::read(stream, suite)? }
                 });
                 quote! { Ok(Self { #( #calls ),* }) }
             }
@@ -21,7 +21,7 @@ pub fn impl_readable_from_stream_trait(ast: DeriveInput) -> TokenStream {
                 let calls = fields.unnamed.iter().enumerate().map(|(i, f)| {
                     let ty = &f.ty;
                     let idx = syn::Index::from(i);
-                    quote! { #idx: <#ty as crate::tls::ReadableFromStream>::read(stream)? }
+                    quote! { #idx: <#ty as crate::tls::ReadableFromStream>::read(stream, suite)? }
                 });
                 quote! { Ok(Self { #( #calls ),* }) }
             }
@@ -51,10 +51,10 @@ pub fn impl_readable_from_stream_trait(ast: DeriveInput) -> TokenStream {
                     if let Some(ident) = field.ident.as_ref() {
                         // named struct
                         is_named_fields = true;
-                        fields.push(quote! { #ident: <#ty as crate::tls::ReadableFromStream>::read(stream)? });
+                        fields.push(quote! { #ident: <#ty as crate::tls::ReadableFromStream>::read(stream, suite)? });
                     } else {
                         fields.push(
-                            quote! { <#ty as crate::tls::ReadableFromStream>::read(stream)? },
+                            quote! { <#ty as crate::tls::ReadableFromStream>::read(stream, suite)? },
                         );
                     }
                 }
@@ -75,7 +75,7 @@ pub fn impl_readable_from_stream_trait(ast: DeriveInput) -> TokenStream {
             }
 
             quote! {
-                let value: #repr = crate::tls::ReadableFromStream::read(stream)?;
+                let value: #repr = crate::tls::ReadableFromStream::read(stream, suite)?;
                 match value {
                     #( #cases ),*,
                     _ => Err(crate::tls::record::alert::Alert::decode_error()),
@@ -95,10 +95,9 @@ pub fn impl_readable_from_stream_trait(ast: DeriveInput) -> TokenStream {
 
     quote! {
         impl #generics crate::tls::ReadableFromStream for #name #generics #generics_where {
-            fn read(stream: &mut impl Iterator<Item=u8>) -> crate::tls::record::alert::Result<Self> {
+            fn read(stream: &mut impl Iterator<Item=u8>, suite: Option<&crate::tls::record::ciphers::cipher_suite::CipherConfig>) -> crate::tls::record::alert::Result<Self> {
                 #body
             }
         }
-    }
-        .into()
+    }.into()
 }

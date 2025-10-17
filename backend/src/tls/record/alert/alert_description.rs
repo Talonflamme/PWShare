@@ -1,6 +1,7 @@
 use crate::tls::record::alert::Alert;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use pwshare_macros::IntoRepr;
+use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 
 /// Description of an Alert layer of TLS.
 /// More info: https://www.rfc-editor.org/rfc/rfc5246.html#section-7.2.2
@@ -132,19 +133,19 @@ impl From<u8> for AlertDescription {
 }
 
 impl ReadableFromStream for AlertDescription {
-    fn read(stream: &mut impl Iterator<Item = u8>) -> crate::tls::record::alert::Result<Self> {
-        let repr = u8::read(stream)?;
+    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> crate::tls::record::alert::Result<Self> {
+        let repr = u8::read(stream, suite)?;
         Ok(Self::from(repr))
     }
 }
 
 impl WritableToSink for AlertDescription {
-    fn write(&self, buffer: &mut impl Sink<u8>) -> crate::tls::record::alert::Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> crate::tls::record::alert::Result<()> {
         if matches!(self, Self::Unknown(_)) {
             Err(Alert::internal_error("Cannot write Unknown AlertDescription"))
         } else {
             let repr: u8 = self.into();
-            repr.write(buffer)?;
+            repr.write(buffer, suite)?;
             Ok(())
         }
     }

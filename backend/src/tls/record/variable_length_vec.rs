@@ -3,6 +3,7 @@ use crate::tls::record::readable_from_stream::ReadableFromStream;
 use crate::tls::{Sink, WritableToSink};
 use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
+use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 
 /// A wrapper type for `Vec<T>`, that can be parsed using `ReadableFromStream`.
 ///
@@ -44,7 +45,7 @@ impl<T, const MIN: usize, const MAX: usize> ReadableFromStream for VariableLengt
 where
     T: ReadableFromStream,
 {
-    fn read(stream: &mut impl Iterator<Item = u8>) -> Result<Self> {
+    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
         let amount_bytes_for_len = (MAX as f64).log(256.0).ceil() as usize;
 
         let mut buf = [0; size_of::<usize>()];
@@ -69,7 +70,7 @@ where
         let mut take = stream.take(length_in_bytes).peekable();
 
         while take.peek().is_some() {
-            res.push(T::read(&mut take)?);
+            res.push(T::read(&mut take, suite)?);
         }
 
         Ok(VariableLengthVec(res))
@@ -80,7 +81,7 @@ impl<T, const MIN: usize, const MAX: usize> WritableToSink for VariableLengthVec
 where
     T: WritableToSink,
 {
-    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
         let amount_bytes_for_len = (MAX as f64).log(256.0).ceil() as usize;
 
         // we use a separate Vec<u8> here, because we need to verify that the length is in bounds
@@ -90,7 +91,7 @@ where
         let mut content_buf: Vec<u8> = Vec::with_capacity(self.len() * size_of::<T>());
 
         for el in self.iter() {
-            el.write(&mut content_buf)?;
+            el.write(&mut content_buf, suite)?;
         }
 
         let length = content_buf.len();

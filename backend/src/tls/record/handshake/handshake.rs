@@ -9,6 +9,7 @@ use crate::tls::ReadableFromStream;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::Debug;
 use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 
 #[repr(u8)]
 #[derive(Debug, ReadableFromStream, WritableToSink)]
@@ -38,8 +39,8 @@ impl Handshake {
 }
 
 impl ReadableFromStream for Handshake {
-    fn read(stream: &mut impl Iterator<Item = u8>) -> Result<Self> {
-        let [bytes0, bytes1, bytes2, bytes3] = u32::read(stream)?.to_be_bytes();
+    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
+        let [bytes0, bytes1, bytes2, bytes3] = u32::read(stream, suite)?.to_be_bytes();
 
         // in TLS, the length is u24
         // since there is no u24 type in rust, the first byte of the u32 is 0.
@@ -52,55 +53,55 @@ impl ReadableFromStream for Handshake {
         // to correctly parse it
         let mut iter = std::iter::once(bytes0).chain(stream.take(length as usize));
 
-        let typ = HandshakeType::read(&mut iter)?;
+        let typ = HandshakeType::read(&mut iter, suite)?;
 
         Ok(Handshake { msg_type: typ })
     }
 }
 
 impl WritableToSink for Handshake {
-    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
         let mut body_buffer: Vec<u8> = Vec::new();
 
         let typ = match &self.msg_type {
             HandshakeType::HelloRequest(hr) => {
-                hr.write(&mut body_buffer)?;
+                hr.write(&mut body_buffer, suite)?;
                 0
             }
             HandshakeType::ClientHello(ch) => {
-                ch.write(&mut body_buffer)?;
+                ch.write(&mut body_buffer, suite)?;
                 1
             }
             HandshakeType::ServerHello(sh) => {
-                sh.write(&mut body_buffer)?;
+                sh.write(&mut body_buffer, suite)?;
                 2
             }
             HandshakeType::Certificate(c) => {
-                c.write(&mut body_buffer)?;
+                c.write(&mut body_buffer, suite)?;
                 11
             }
             HandshakeType::ServerKeyExchange(ske) => {
-                ske.write(&mut body_buffer)?;
+                ske.write(&mut body_buffer, suite)?;
                 12
             }
             HandshakeType::CertificateRequest(cr) => {
-                cr.write(&mut body_buffer)?;
+                cr.write(&mut body_buffer, suite)?;
                 13
             }
             HandshakeType::ServerHelloDone(shd) => {
-                shd.write(&mut body_buffer)?;
+                shd.write(&mut body_buffer, suite)?;
                 14
             }
             HandshakeType::CertificateVerify(cv) => {
-                cv.write(&mut body_buffer)?;
+                cv.write(&mut body_buffer, suite)?;
                 15
             }
             HandshakeType::ClientKeyExchange(cke) => {
-                cke.write(&mut body_buffer)?;
+                cke.write(&mut body_buffer, suite)?;
                 16
             }
             HandshakeType::Finished(f) => {
-                f.write(&mut body_buffer)?;
+                f.write(&mut body_buffer, suite)?;
                 20
             }
         };

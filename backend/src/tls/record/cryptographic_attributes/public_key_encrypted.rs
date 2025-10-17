@@ -3,6 +3,7 @@ use crate::tls::record::variable_length_vec::VariableLengthVec;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
+use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 
 pub struct PublicKeyEncrypted<T>
 where
@@ -25,8 +26,8 @@ impl<T> WritableToSink for PublicKeyEncrypted<T>
 where
     T: ReadableFromStream,
 {
-    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
-        self.bytes.write(buffer)
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
+        self.bytes.write(buffer, suite)
     }
 }
 
@@ -34,9 +35,9 @@ impl<T> ReadableFromStream for PublicKeyEncrypted<T>
 where
     T: ReadableFromStream,
 {
-    fn read(stream: &mut impl Iterator<Item = u8>) -> Result<Self> {
+    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
         Ok(Self {
-            bytes: VariableLengthVec::read(stream)?,
+            bytes: VariableLengthVec::read(stream, suite)?,
             _marker: PhantomData,
         })
     }
@@ -46,14 +47,14 @@ impl<T> PublicKeyEncrypted<T>
 where
     T: ReadableFromStream,
 {
-    pub fn decrypt<F>(self, decrypt_func: F) -> Result<T>
+    pub fn decrypt<F>(self, decrypt_func: F, suite: Option<&CipherConfig>) -> Result<T>
     where
         F: FnOnce(Vec<u8>) -> Result<Vec<u8>>,
     {
         let decrypted_bytes = decrypt_func(self.bytes.into())?;
         let mut iter = decrypted_bytes.into_iter();
 
-        let t = T::read(&mut iter)?;
+        let t = T::read(&mut iter, suite)?;
 
         if iter.next().is_some() {
             Err(Alert::decrypt_error()) // left over bytes

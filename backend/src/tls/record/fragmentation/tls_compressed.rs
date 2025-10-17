@@ -51,9 +51,9 @@ impl TLSCompressed {
         let mut message = Vec::with_capacity(MESSAGE_SIZE + self.fragment.len());
 
         message.extend_from_slice(&con_state.sequence_number.to_be_bytes()); // seq_number
-        self.content_type.write(&mut message)?; // .type
-        self.version.write(&mut message)?; // .version
-        (self.fragment.len() as u16).write(&mut message)?; // .length
+        self.content_type.write(&mut message, None)?; // .type
+        self.version.write(&mut message, None)?; // .version
+        (self.fragment.len() as u16).write(&mut message, None)?; // .length
         message.extend_from_slice(self.fragment.as_slice()); // .fragment
 
         let write_key = con_state.mac_key.as_slice();

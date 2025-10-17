@@ -1,6 +1,7 @@
 use crate::tls::record::alert::{Alert, Result};
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use pwshare_macros::{FromRepr, IntoRepr};
+use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 
 #[repr(u8)]
 #[derive(FromRepr, Clone, Copy, Debug, IntoRepr)]
@@ -16,20 +17,20 @@ pub enum HashAlgorithm {
 }
 
 impl ReadableFromStream for HashAlgorithm {
-    fn read(stream: &mut impl Iterator<Item = u8>) -> Result<Self> {
-        let u = u8::read(stream)?;
+    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
+        let u = u8::read(stream, suite)?;
 
         Ok(Self::try_from(u).unwrap_or(Self::Unknown))
     }
 }
 
 impl WritableToSink for HashAlgorithm {
-    fn write(&self, buffer: &mut impl Sink<u8>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
         if matches!(self, Self::Unknown) {
             Err(Alert::internal_error("Cannot write unknown HashAlgorithm")) // should never come here
         } else {
             let u: u8 = self.into();
-            u.write(buffer)
+            u.write(buffer, suite)
         }
     }
 }

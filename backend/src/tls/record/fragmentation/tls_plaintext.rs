@@ -8,6 +8,7 @@ use crate::tls::record::Handshake;
 use crate::tls::{ReadableFromStream, WritableToSink};
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Formatter};
+use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ReadableFromStream, WritableToSink)]
@@ -57,15 +58,15 @@ impl Debug for TLSPlaintext {
 }
 
 impl TLSPlaintext {
-    pub fn new(content: ContentTypeWithContent, version: ProtocolVersion) -> Result<Self> {
+    pub fn new(content: ContentTypeWithContent, version: ProtocolVersion, suite: Option<&CipherConfig>) -> Result<Self> {
         let content_type = (&content).into();
 
         let mut bytes: Vec<u8> = Vec::new();
 
         match content {
-            ContentTypeWithContent::Handshake(h) => h.write(&mut bytes)?,
-            ContentTypeWithContent::ChangeCipherSpec(c) => c.write(&mut bytes)?,
-            ContentTypeWithContent::Alert(a) => a.write(&mut bytes)?,
+            ContentTypeWithContent::Handshake(h) => h.write(&mut bytes, suite)?,
+            ContentTypeWithContent::ChangeCipherSpec(c) => c.write(&mut bytes, suite)?,
+            ContentTypeWithContent::Alert(a) => a.write(&mut bytes, suite)?,
             ContentTypeWithContent::ApplicationData(mut b) => bytes.append(&mut b),
         };
 
@@ -80,16 +81,16 @@ impl TLSPlaintext {
         })
     }
 
-    pub fn get_content(self) -> Result<ContentTypeWithContent> {
+    pub fn get_content(self, suite: Option<&CipherConfig>) -> Result<ContentTypeWithContent> {
         let mut iter = Into::<Vec<u8>>::into(self.fragment).into_iter();
 
         Ok(match self.content_type {
             ContentType::ChangeCipherSpec => {
-                ContentTypeWithContent::ChangeCipherSpec(ChangeCipherSpec::read(&mut iter)?)
+                ContentTypeWithContent::ChangeCipherSpec(ChangeCipherSpec::read(&mut iter, suite)?)
             }
-            ContentType::Alert => ContentTypeWithContent::Alert(Alert::read(&mut iter)?),
+            ContentType::Alert => ContentTypeWithContent::Alert(Alert::read(&mut iter, suite)?),
             ContentType::Handshake => {
-                ContentTypeWithContent::Handshake(Handshake::read(&mut iter)?)
+                ContentTypeWithContent::Handshake(Handshake::read(&mut iter, suite)?)
             }
             ContentType::ApplicationData => ContentTypeWithContent::ApplicationData(iter.collect()),
         })
@@ -97,7 +98,7 @@ impl TLSPlaintext {
 
     /// Returns a Handshake that parses the bytes of `self.fragment` if `self.content_type`
     /// is Handshake. Returns an `Err` otherwise.
-    pub fn get_handshake(self) -> Result<Handshake> {
+    pub fn get_handshake(self, suite: Option<&CipherConfig>) -> Result<Handshake> {
         if self.content_type != ContentType::Handshake {
             return Err(Alert::unexpected_message()); // expected handshake, got something other
         }
@@ -105,7 +106,7 @@ impl TLSPlaintext {
         let frag: Vec<u8> = self.fragment.into();
         let mut iter = frag.into_iter();
 
-        let handshake = Handshake::read(&mut iter)?;
+        let handshake = Handshake::read(&mut iter, suite)?;
 
         if iter.next().is_some() {
             Err(Alert::decode_error()) // too many bytes
@@ -124,7 +125,7 @@ impl TLSPlaintext {
         let frag: Vec<u8> = self.fragment.into();
         let mut iter = frag.into_iter();
 
-        let ccs = ChangeCipherSpec::read(&mut iter)?;
+        let ccs = ChangeCipherSpec::read(&mut iter, None)?;
 
         if iter.next().is_some() {
             Err(Alert::decode_error())
