@@ -25,12 +25,14 @@ pub struct ECPoint {
 
 #[repr(u16)]
 #[derive(Debug, ReadableFromStream, WritableToSink)]
+#[fallback(Unknown)]
 pub enum NamedCurve {
     SECP256R1 = 23,
     SECP384R1 = 24,
     SECP521R1 = 25,
     X25519 = 29,
     X448 = 30,
+    Unknown,
 }
 
 #[derive(Debug, ReadableFromStream, WritableToSink)]

@@ -1,3 +1,4 @@
+use crate::tls::record::hello::extensions::elliptic_curves::{ECPointFormatList, NamedCurveList};
 use crate::tls::record::hello::extensions::renegotiation_info::RenegotiationInfoExtension;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use pwshare_macros::{IntoRepr, ReadableFromStream, WritableToSink};
@@ -7,6 +8,8 @@ use std::fmt::{Debug, Formatter};
 #[derive(Debug, IntoRepr, ReadableFromStream, WritableToSink)]
 #[fallback(Unknown)]
 pub enum ExtensionType {
+    SupportedGroups(OpaqueExtensionData<NamedCurveList>) = 10,
+    ECPointFormats(OpaqueExtensionData<ECPointFormatList>) = 11,
     RenegotiationInfo(OpaqueExtensionData<RenegotiationInfoExtension>) = 65281,
     Unknown(OpaqueExtensionData<u8>) = 65535,
 }
