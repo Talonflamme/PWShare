@@ -1,4 +1,4 @@
-use super::{rabin_miller::MillerRabinTest, PrivateKey, Sieve};
+use super::{rabin_miller::MillerRabinTest, RSAPrivateKey, Sieve};
 use crate::cryptography::rng::rng;
 use num_bigint::{BigUint, RandBigInt};
 use num_integer::Integer;
@@ -104,7 +104,7 @@ fn choose_e(lambda_n: &BigUint) -> BigUint {
 
 // TODO: do massive speed ups here
 /// Generate the public and private keys. The key (i.e. modulus `n`) will have `key_size` bits.
-pub fn generate_key(key_size: u64) -> PrivateKey {
+pub fn generate_key(key_size: u64) -> RSAPrivateKey {
     //?  (1) Choose two large prime numbers p and q
     let (mut p, mut q) = generate_p_and_q(key_size);
 
@@ -120,5 +120,5 @@ pub fn generate_key(key_size: u64) -> PrivateKey {
     //?  (5) Determine d as `d ≡ e^(-1) (mod λ(n))`
     let d = e.modinv(&lambda_n).unwrap();
 
-    PrivateKey::new(n, d, e, p, q)
+    RSAPrivateKey::new(n, d, e, p, q)
 }

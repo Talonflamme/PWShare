@@ -1,20 +1,18 @@
 use crate::cryptography::pem::FromPemContent;
 use crate::cryptography::pkcs1_v1_5;
-use crate::cryptography::rsa::PrivateKey;
+use crate::cryptography::rsa::RSAPrivateKey;
 use crate::tls::connection_state::compression_method::CompressionMethod;
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::connection_state::security_parameters::{ConnectionEnd, SecurityParameters};
 use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::certificate::{ASN1Cert, Certificate};
 use crate::tls::record::change_cipher_spec::ChangeCipherSpec;
-use crate::tls::record::ciphers::cipher_suite;
-use crate::tls::record::ciphers::cipher_suite::CipherConfig;
+use crate::tls::record::ciphers::cipher_suite::{self, CipherConfig};
 use crate::tls::record::ciphers::key_exchange_algorithm::KeyExchangeAlgorithm;
 use crate::tls::record::fragmentation::tls_ciphertext::TLSCiphertext;
 use crate::tls::record::fragmentation::tls_plaintext::{ContentTypeWithContent, TLSPlaintext};
 use crate::tls::record::hello::extensions::{Extension, ExtensionType, RenegotiationInfoExtension};
-use crate::tls::record::hello::ServerHelloDone;
-use crate::tls::record::hello::{extensions, ClientHello, ServerHello, SessionID};
+use crate::tls::record::hello::{extensions, ClientHello, ServerHello, SessionID, ServerHelloDone};
 use crate::tls::record::key_exchange::rsa::PreMasterSecret;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::{ClientKeyExchange, Finished, Handshake, HandshakeType, Random};
@@ -25,10 +23,10 @@ use std::fs;
 use std::io::{Error, ErrorKind, Write};
 use std::net::TcpStream;
 
-pub static RSA_KEY: Lazy<Result<PrivateKey>> = Lazy::new(|| {
+pub static RSA_KEY: Lazy<Result<RSAPrivateKey>> = Lazy::new(|| {
     let key_content = fs::read_to_string("key.pem")
         .map_err(|e| Alert::internal_error(format!("Error reading key file: {}", e)))?;
-    PrivateKey::from_pem_content(key_content)
+    RSAPrivateKey::from_pem_content(key_content)
         .map_err(|e| Alert::internal_error(format!("Error parsing .pem file: {}", e)))
 });
 
@@ -223,6 +221,8 @@ impl Connection {
         let curve = cipher_suite::select_ec_curve(extensions)?;
 
         self.cipher_suite.unwrap().ec_curve = Some(curve);
+
+        let curve = curve.curve()?;
 
         todo!();
 

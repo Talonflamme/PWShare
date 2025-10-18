@@ -1,10 +1,10 @@
 use crate::cryptography::rsa::modular_arithmetic::ModularArithmetic;
-use crate::cryptography::rsa::PublicKey;
+use crate::cryptography::rsa::RSAPublicKey;
 use num_bigint::BigUint;
 use std::fmt::{Debug, Display};
 
 #[derive(Debug)]
-pub struct PrivateKey {
+pub struct RSAPrivateKey {
     pub n: BigUint,
     pub d: BigUint,
     pub e: BigUint,
@@ -22,7 +22,7 @@ pub struct DecryptError {
     reason: &'static str,
 }
 
-impl PrivateKey {
+impl RSAPrivateKey {
     pub fn new_detailed(
         n: BigUint,
         d: BigUint,
@@ -97,8 +97,8 @@ impl PrivateKey {
         Ok(result)
     }
 
-    pub fn public(&self) -> PublicKey {
-        PublicKey {
+    pub fn public(&self) -> RSAPublicKey {
+        RSAPublicKey {
             n: self.n.clone(),
             e: self.e.clone(),
         }
@@ -110,16 +110,16 @@ impl PrivateKey {
     }
 }
 
-impl Display for PrivateKey {
+impl Display for RSAPrivateKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}, {})", self.n, self.d)
     }
 }
 
-impl PartialEq for PrivateKey {
+impl PartialEq for RSAPrivateKey {
     fn eq(&self, other: &Self) -> bool {
         self.n == other.n && self.d == other.d
     }
 }
 
-impl Eq for PrivateKey {}
+impl Eq for RSAPrivateKey {}

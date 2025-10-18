@@ -1,6 +1,6 @@
 use crate::cryptography::pem::asn1der::{FromASN1DER, ToASN1DER};
 use crate::cryptography::pem::base64::{base64decode, base64encode};
-use crate::cryptography::rsa::{PrivateKey, PublicKey};
+use crate::cryptography::rsa::{RSAPrivateKey, RSAPublicKey};
 
 pub trait ToPemContent {
     fn to_pem_content(&self) -> String;
@@ -22,7 +22,7 @@ fn insert_newlines(s: String, line_length: usize) -> String {
     result
 }
 
-impl ToPemContent for PublicKey {
+impl ToPemContent for RSAPublicKey {
     fn to_pem_content(&self) -> String {
         let asn1der_repr = self.to_asn1_der();
         let b64 = base64encode(asn1der_repr.as_slice());
@@ -40,7 +40,7 @@ impl ToPemContent for PublicKey {
     }
 }
 
-impl ToPemContent for PrivateKey {
+impl ToPemContent for RSAPrivateKey {
     fn to_pem_content(&self) -> String {
         let asn1der_repr = self.to_asn1_der();
         let b64 = base64encode(asn1der_repr.as_slice());
@@ -81,7 +81,7 @@ pub trait FromPemContent: Sized {
     fn from_pem_content(content: String) -> Result<Self, &'static str>;
 }
 
-impl FromPemContent for PublicKey {
+impl FromPemContent for RSAPublicKey {
     fn from_pem_content(content: String) -> Result<Self, &'static str> {
         let content = find_content_between_header(
             content,
@@ -96,7 +96,7 @@ impl FromPemContent for PublicKey {
     }
 }
 
-impl FromPemContent for PrivateKey {
+impl FromPemContent for RSAPrivateKey {
     fn from_pem_content(content: String) -> Result<Self, &'static str> {
         let content = find_content_between_header(
             content,

@@ -1,7 +1,7 @@
 use super::hash_algorithm::HashAlgorithm;
 use crate::cryptography::pem::asn1der::{self, FromASN1DER, ToASN1DER};
 use crate::cryptography::pkcs1_v1_5;
-use crate::cryptography::rsa::PrivateKey;
+use crate::cryptography::rsa::RSAPrivateKey;
 use crate::tls::record::alert::{Alert, Result};
 use num_bigint::BigUint;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
@@ -69,7 +69,7 @@ impl FromASN1DER for DigestInfo {
     }
 }
 
-pub fn sign(key: &PrivateKey, message: &[u8], hash_algorithm: &HashAlgorithm) -> Result<Vec<u8>> {
+pub fn sign(key: &RSAPrivateKey, message: &[u8], hash_algorithm: &HashAlgorithm) -> Result<Vec<u8>> {
     let identifier = hash_algorithm
         .object_identifier()
         .ok_or(Alert::internal_error(format!(

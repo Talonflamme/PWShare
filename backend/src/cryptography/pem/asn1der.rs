@@ -1,4 +1,4 @@
-use crate::cryptography::rsa::{PrivateKey, PublicKey};
+use crate::cryptography::rsa::{RSAPrivateKey, RSAPublicKey};
 use num_bigint::BigUint;
 use num_traits::One;
 
@@ -382,7 +382,7 @@ fn decode_rsa_algorithm_identifier(
     Ok(())
 }
 
-impl PublicKey {
+impl RSAPublicKey {
     fn asn1_rsa_public_key(&self) -> Vec<u8> {
         let mut sequence = Vec::new();
 
@@ -396,7 +396,7 @@ impl PublicKey {
     }
 }
 
-impl PublicKey {
+impl RSAPublicKey {
     fn decode_rsa_public_key(iter: &mut impl Iterator<Item = u8>) -> Result<Self, &'static str> {
         let bit_string = decode_bit_string(iter)?;
 
@@ -425,7 +425,7 @@ impl PublicKey {
     }
 }
 
-impl ToASN1DER for PublicKey {
+impl ToASN1DER for RSAPublicKey {
     fn to_asn1_der(&self) -> Vec<u8> {
         let mut algorithm_identifier = asn1_rsa_algorithm_identifier();
         let mut public_key = self.asn1_rsa_public_key();
@@ -438,7 +438,7 @@ impl ToASN1DER for PublicKey {
     }
 }
 
-impl PrivateKey {
+impl RSAPrivateKey {
     fn asn1_version() -> Vec<u8> {
         encode_integer(0)
     }
@@ -481,7 +481,7 @@ impl PrivateKey {
     }
 }
 
-impl ToASN1DER for PrivateKey {
+impl ToASN1DER for RSAPrivateKey {
     fn to_asn1_der(&self) -> Vec<u8> {
         let mut version = Self::asn1_version();
         let mut algorithm_identifier = asn1_rsa_algorithm_identifier();
@@ -500,7 +500,7 @@ pub trait FromASN1DER: Sized {
     fn from_asn1_der(bytes: impl IntoIterator<Item = u8>) -> Result<Self, &'static str>;
 }
 
-impl FromASN1DER for PublicKey {
+impl FromASN1DER for RSAPublicKey {
     fn from_asn1_der(bytes: impl IntoIterator<Item = u8>) -> Result<Self, &'static str> {
         let mut iter = bytes.into_iter();
 
@@ -516,7 +516,7 @@ impl FromASN1DER for PublicKey {
     }
 }
 
-impl PrivateKey {
+impl RSAPrivateKey {
     fn decode_version(
         iter: &mut impl Iterator<Item = u8>,
         expected: i64,
@@ -589,7 +589,7 @@ impl PrivateKey {
     }
 }
 
-impl FromASN1DER for PrivateKey {
+impl FromASN1DER for RSAPrivateKey {
     fn from_asn1_der(bytes: impl IntoIterator<Item = u8>) -> Result<Self, &'static str> {
         let mut iter = bytes.into_iter();
 
