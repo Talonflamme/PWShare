@@ -13,7 +13,7 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
 use readable_from_stream::impl_readable_from_stream_trait;
-use syn::{DeriveInput, Ident, LitInt};
+use syn::{Attribute, DeriveInput, Ident, LitInt};
 
 fn get_repr_type(ast: &DeriveInput) -> Option<Ident> {
     for attr in &ast.attrs {
@@ -43,13 +43,41 @@ fn get_repr_type(ast: &DeriveInput) -> Option<Ident> {
     None
 }
 
-#[proc_macro_derive(ReadableFromStream)]
+fn get_fallback_name(attr: Option<&Attribute>) -> Option<Ident> {
+    let attr = if let Some(a) = attr {
+        a
+    } else {
+        return None;
+    };
+
+    let mut ident = None;
+
+    attr.parse_nested_meta(|meta| {
+        let i = meta.path.require_ident()?;
+
+        if ident.is_none() {
+            ident = Some(i.clone());
+            Ok(())
+        } else {
+            Err(meta.error("Incorrect usage. Correct: [fallback(Variant)]"))
+        }
+    })
+    .unwrap();
+
+    ident
+}
+
+fn get_attr<'a>(ast: &'a DeriveInput, ident: &str) -> Option<&'a Attribute> {
+    ast.attrs.iter().find(|&attr| attr.path().is_ident(ident))
+}
+
+#[proc_macro_derive(ReadableFromStream, attributes(fallback))]
 pub fn readable_from_stream_macro(item: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(item).unwrap();
     impl_readable_from_stream_trait(ast)
 }
 
-#[proc_macro_derive(WritableToSink)]
+#[proc_macro_derive(WritableToSink, attributes(fallback))]
 pub fn writable_to_sink_macro(item: TokenStream) -> TokenStream {
     let ast = syn::parse(item).unwrap();
     impl_writable_to_sink(ast).into()

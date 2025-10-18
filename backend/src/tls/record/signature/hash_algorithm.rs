@@ -1,11 +1,9 @@
 use crate::cryptography::hashing::{self, HashFunction};
-use crate::tls::record::alert::{Alert, Result};
-use crate::tls::record::ciphers::cipher_suite::CipherConfig;
-use crate::tls::{ReadableFromStream, Sink, WritableToSink};
-use pwshare_macros::{FromRepr, IntoRepr};
+use pwshare_macros::{ReadableFromStream, WritableToSink};
 
 #[repr(u8)]
-#[derive(FromRepr, Clone, Copy, Debug, IntoRepr)]
+#[derive(Clone, Copy, Debug, ReadableFromStream, WritableToSink)]
+#[fallback(Unknown)]
 pub enum HashAlgorithm {
     None = 0,
     Md5 = 1,
@@ -42,25 +40,6 @@ impl HashAlgorithm {
             HashAlgorithm::Sha256 => Some(vec![2, 16, 840, 1, 101, 3, 4, 2, 1]),
             HashAlgorithm::Sha384 => Some(vec![2, 16, 840, 1, 101, 3, 4, 2, 2]),
             HashAlgorithm::Sha512 => Some(vec![2, 16, 840, 1, 101, 3, 4, 2, 3]),
-        }
-    }
-}
-
-impl ReadableFromStream for HashAlgorithm {
-    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
-        let u = u8::read(stream, suite)?;
-
-        Ok(Self::try_from(u).unwrap_or(Self::Unknown))
-    }
-}
-
-impl WritableToSink for HashAlgorithm {
-    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
-        if matches!(self, Self::Unknown) {
-            Err(Alert::internal_error("Cannot write unknown HashAlgorithm")) // should never come here
-        } else {
-            let u: u8 = self.into();
-            u.write(buffer, suite)
         }
     }
 }

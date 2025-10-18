@@ -1,24 +1,28 @@
-use crate::get_repr_type;
+use crate::*;
 use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
+use quote::{ToTokens, quote};
 use syn::{Data, DataEnum, DataStruct, DeriveInput, Fields};
 
-fn impl_writable_to_sink_struct(data_struct: &DataStruct) -> TokenStream {
+fn impl_writable_to_sink_struct(
+    data_struct: &DataStruct,
+    fallback_attr: Option<&Attribute>,
+) -> TokenStream {
+    if fallback_attr.is_some() {
+        return quote! { compile_error!("[fallback] is only usable for enums."); };
+    }
+
     match &data_struct.fields {
         Fields::Named(fields) => {
             let calls = fields.named.iter().map(|f| {
                 let ident = f.ident.as_ref().unwrap();
-                let ty = &f.ty;
-
-                quote! { <#ty as crate::tls::WritableToSink>::write(&self.#ident , buffer, suite)?; }
+                quote! { crate::tls::WritableToSink::write(&self.#ident , buffer, suite)?; }
             });
             quote! { #(#calls)* Ok(()) }
         }
         Fields::Unnamed(fields) => {
-            let calls = fields.unnamed.iter().enumerate().map(|(i, f)| {
-                let ty = &f.ty;
+            let calls = fields.unnamed.iter().enumerate().map(|(i, _)| {
                 let idx = syn::Index::from(i);
-                quote! { <#ty as crate::tls::WritableToSink>::write(&self.#idx , buffer, suite)?; }
+                quote! { crate::tls::WritableToSink::write(&self.#idx , buffer, suite)?; }
             });
             quote! { #(#calls)* Ok(()) }
         }
@@ -28,9 +32,14 @@ fn impl_writable_to_sink_struct(data_struct: &DataStruct) -> TokenStream {
     }
 }
 
-fn impl_writable_to_sink_enum(data_enum: &DataEnum, ast: &DeriveInput) -> TokenStream {
+fn impl_writable_to_sink_enum(
+    data_enum: &DataEnum,
+    ast: &DeriveInput,
+    fallback_attr: Option<&Attribute>,
+) -> TokenStream {
     let name = &ast.ident;
     let repr = get_repr_type(ast);
+    let fallback = get_fallback_name(fallback_attr);
 
     if repr.is_none() {
         return quote! { compile_error!("WritableToSink requires repr attribute with any unsigned integer on enum."); }.into();
@@ -45,10 +54,6 @@ fn impl_writable_to_sink_enum(data_enum: &DataEnum, ast: &DeriveInput) -> TokenS
         let variant_name = &variant.ident;
         let mut is_named_fields = false;
 
-        let Some((_, disc)) = &variant.discriminant else {
-            return quote! { compile_error("WritableToSink requires all enum variants to have a discriminant"); };
-        };
-
         for (i, field) in variant.fields.iter().enumerate() {
             let field_i: TokenStream = if let Some(id) = &field.ident {
                 is_named_fields = true;
@@ -59,9 +64,7 @@ fn impl_writable_to_sink_enum(data_enum: &DataEnum, ast: &DeriveInput) -> TokenS
 
             field_definition.push(field_i.clone());
 
-            let ty = &field.ty;
-            field_body
-                .push(quote! { <#ty as crate::tls::WritableToSink>::write(#field_i, buffer, suite)? });
+            field_body.push(quote! { crate::tls::WritableToSink::write(#field_i, buffer, suite)? });
         }
 
         let fields = if field_definition.is_empty() {
@@ -72,10 +75,20 @@ fn impl_writable_to_sink_enum(data_enum: &DataEnum, ast: &DeriveInput) -> TokenS
             quote! { { #(#field_definition),* } }
         };
 
-        cases.push(quote! { #name::#variant_name #fields => {
-            <#repr as crate::tls::WritableToSink>::write(&#disc, buffer, suite)?;
-            #(#field_body);*
-        } });
+        if let Some(fb) = fallback.as_ref()
+            && fb == variant_name
+        {
+            cases.push(quote! { #name::#variant_name #fields => {
+                return Err(crate::tls::record::alert::Alert::internal_error("Cannot write: "));
+            } })
+        } else if let Some((_, disc)) = &variant.discriminant {
+            cases.push(quote! { #name::#variant_name #fields => {
+                <#repr as crate::tls::WritableToSink>::write(&#disc, buffer, suite)?;
+                #(#field_body);*
+            } });
+        } else {
+            return quote! { compile_error("WritableToSink requires all enum variants to have a discriminant"); };
+        }
     }
 
     quote! {
@@ -88,10 +101,11 @@ fn impl_writable_to_sink_enum(data_enum: &DataEnum, ast: &DeriveInput) -> TokenS
 
 pub fn impl_writable_to_sink(ast: DeriveInput) -> TokenStream {
     let name = &ast.ident;
+    let fallback_attr = get_attr(&ast, "fallback");
 
     let body = match &ast.data {
-        Data::Struct(data_struct) => impl_writable_to_sink_struct(data_struct),
-        Data::Enum(data_enum) => impl_writable_to_sink_enum(data_enum, &ast),
+        Data::Struct(data_struct) => impl_writable_to_sink_struct(data_struct, fallback_attr),
+        Data::Enum(data_enum) => impl_writable_to_sink_enum(data_enum, &ast, fallback_attr),
         _ => {
             return quote! {
                 compile_error!("ReadableFromStream only works on structs");

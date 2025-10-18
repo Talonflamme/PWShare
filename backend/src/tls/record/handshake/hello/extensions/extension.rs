@@ -1,45 +1,15 @@
-use crate::tls::record::alert::{Alert, Result};
-use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::record::hello::extensions::renegotiation_info::RenegotiationInfoExtension;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
-use crate::tls::{ReadableFromStream, Sink, WritableToSink};
+use crate::tls::WritableToSink;
 use pwshare_macros::{IntoRepr, ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Formatter};
 
 #[repr(u16)]
-#[derive(Debug, IntoRepr)]
+#[derive(Debug, IntoRepr, ReadableFromStream, WritableToSink)]
+#[fallback(Unknown)]
 pub enum ExtensionType {
     RenegotiationInfo(OpaqueExtensionData<RenegotiationInfoExtension>) = 65281,
     Unknown(OpaqueExtensionData<u8>) = 65535,
-}
-
-impl WritableToSink for ExtensionType {
-    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
-        if matches!(self, ExtensionType::Unknown(_)) {
-            return Err(Alert::internal_error("Cannot write unknown ExtensionType"));
-        }
-
-        let repr: u16 = self.into();
-        repr.write(buffer, suite)?;
-
-        match self {
-            ExtensionType::RenegotiationInfo(ri) => ri.write(buffer, suite)?,
-            ExtensionType::Unknown(_) => unreachable!(),
-        }
-
-        Ok(())
-    }
-}
-
-impl ReadableFromStream for ExtensionType {
-    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
-        let repr = u16::read(stream, suite)?;
-
-        Ok(match repr {
-            65281 => Self::RenegotiationInfo(ReadableFromStream::read(stream, suite)?),
-            _ => Self::Unknown(ReadableFromStream::read(stream, suite)?),
-        })
-    }
 }
 
 impl ExtensionType {
