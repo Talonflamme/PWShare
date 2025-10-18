@@ -1,6 +1,5 @@
 use crate::tls::record::hello::extensions::renegotiation_info::RenegotiationInfoExtension;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
-use crate::tls::WritableToSink;
 use pwshare_macros::{IntoRepr, ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Formatter};
 

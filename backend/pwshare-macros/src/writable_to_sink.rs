@@ -1,7 +1,7 @@
 use crate::*;
 use proc_macro2::TokenStream;
 use quote::{ToTokens, quote};
-use syn::{Data, DataEnum, DataStruct, DeriveInput, Fields};
+use syn::{Data, DataEnum, DataStruct, DeriveInput, Fields, LitStr};
 
 fn impl_writable_to_sink_struct(
     data_struct: &DataStruct,
@@ -78,8 +78,10 @@ fn impl_writable_to_sink_enum(
         if let Some(fb) = fallback.as_ref()
             && fb == variant_name
         {
+            let cannot_write = format!("Cannot write: {}::{}", name, variant_name);
+
             cases.push(quote! { #name::#variant_name #fields => {
-                return Err(crate::tls::record::alert::Alert::internal_error("Cannot write: "));
+                return Err(crate::tls::record::alert::Alert::internal_error(#cannot_write));
             } })
         } else if let Some((_, disc)) = &variant.discriminant {
             cases.push(quote! { #name::#variant_name #fields => {
