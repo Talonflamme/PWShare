@@ -3,6 +3,8 @@ use crate::tls::connection_state::prf::PRFAlgorithm;
 use crate::tls::connection_state::security_parameters::{BulkCipherAlgorithm, SecurityParameters};
 use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::ciphers::key_exchange_algorithm::KeyExchangeAlgorithm;
+use crate::tls::record::hello::extensions::{Extension, ExtensionType, NamedCurveList};
+use crate::tls::record::key_exchange::ecdhe::elliptic_curve::NamedCurve;
 use crate::tls::record::signature::{HashAlgorithm, SignatureAlgorithm};
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use pwshare_macros::{FromRepr, IntoRepr};
@@ -96,6 +98,9 @@ pub struct CipherConfig {
     pub prf: PRFAlgorithm,
     /// size of key in bytes
     pub key_length: u8,
+    /// The EllipticCurve that was chosen for the `KeyExchange`. Initially `None`, until
+    /// the `ServerKeyExchange` message is sent. Only `Some`, when `.key_exchange` is `ECDHE`.
+    pub ec_curve: Option<NamedCurve>,
 }
 
 impl CipherSuite {
@@ -109,6 +114,7 @@ impl CipherSuite {
                 hash: HashAlgorithm::None,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 0,
+                ec_curve: None,
             }),
             CipherSuite::TlsRsaWithAes256CbcSha256 => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
@@ -118,6 +124,7 @@ impl CipherSuite {
                 hash: HashAlgorithm::Sha256,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 32,
+                ec_curve: None,
             }),
             CipherSuite::TlsRsaWithAes256CbcSha => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
@@ -127,6 +134,7 @@ impl CipherSuite {
                 hash: HashAlgorithm::Sha1,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 32,
+                ec_curve: None,
             }),
             CipherSuite::TlsRsaWithAes128CbcSha256 => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
@@ -136,6 +144,7 @@ impl CipherSuite {
                 hash: HashAlgorithm::Sha256,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 16,
+                ec_curve: None,
             }),
             CipherSuite::TlsRsaWithAes128CbcSha => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
@@ -145,6 +154,7 @@ impl CipherSuite {
                 hash: HashAlgorithm::Sha1,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 16,
+                ec_curve: None,
             }),
             CipherSuite::TlsRsaWithAes128GcmSha256 => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
@@ -154,6 +164,7 @@ impl CipherSuite {
                 hash: HashAlgorithm::Sha256,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 16,
+                ec_curve: None,
             }),
             CipherSuite::TlsRsaWithAes256GcmSha384 => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Rsa,
@@ -163,6 +174,7 @@ impl CipherSuite {
                 hash: HashAlgorithm::Sha384,
                 prf: PRFAlgorithm::TlsPrfSha384,
                 key_length: 32,
+                ec_curve: None,
             }),
             CipherSuite::TlsEcdheRsaWithAes128CbcSha256 => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Ecdhe,
@@ -172,6 +184,7 @@ impl CipherSuite {
                 hash: HashAlgorithm::Sha256,
                 prf: PRFAlgorithm::TlsPrfSha256,
                 key_length: 16,
+                ec_curve: None,
             }),
             _ => Err(Alert::internal_error("Unsupported cipher was negotiated")), // should not occur
         }
@@ -201,14 +214,79 @@ pub const SUPPORTED_CIPHER_SUITES: [CipherSuite; 7] = [
     CipherSuite::TlsRsaWithAes128CbcSha,
 ];
 
+/// A list of `NamedCurve`s that this Server supports. They are in order of preference (most
+/// preferable first).
+pub const SUPPORTED_EC_CURVES: [NamedCurve; 5] = [
+    NamedCurve::X25519,
+    NamedCurve::X448,
+    NamedCurve::SECP256R1,
+    NamedCurve::SECP384R1,
+    NamedCurve::SECP521R1,
+];
+
+/// Returns a reference to the `NamedCurveList` of the `Supported Groups Extension`.
+/// Returns an `Err` when decoding the extension fails. If this extension is not present,
+/// an `Ok(None)` will be returned, as the parsing did not fail, but there simply was no
+/// such extension in `extensions`.
+fn get_client_supported_named_curves(extensions: &[Extension]) -> Result<Option<&NamedCurveList>> {
+    for ex in extensions.iter() {
+        if let ExtensionType::SupportedGroups(sg) = &ex.extension_type {
+            if sg.len() != 1 {
+                return Err(Alert::decode_error());
+            }
+
+            return Ok(Some(&sg[0]));
+        }
+    }
+
+    Ok(None)
+}
+
+/// Select a NamedCurve that is supported by both the Client (in `client_extensions`) and
+/// the server (in `SUPPORTED_EC_CURVES`). If no common curve is found, an `Alert::handshake_fail()`
+/// is returned. If no `Supported Groups Extension` is sent by the client, the most preferable
+/// curve of this server is returned (usually `X25519`).
+pub fn select_ec_curve(client_extensions: &[Extension]) -> Result<NamedCurve> {
+    let curves = get_client_supported_named_curves(client_extensions)?;
+
+    if let Some(sg) = curves {
+        SUPPORTED_EC_CURVES
+            .iter()
+            .find(|&curve| sg.contains(curve))
+            .map(|curve| Ok(*curve))
+            .unwrap_or_else(|| Err(Alert::handshake_failure()))
+    } else {
+        Ok(SUPPORTED_EC_CURVES[0])
+    }
+}
+
 /// Our server enforces our own preference since we deal with sharing passwords. This function
 /// selects the best `CipherSuite` that are present in `SUPPORTED_CIPHER_SUITES` and in the
 /// `cipher_suites_from_client`.
-pub fn select_cipher_suite(cipher_suites_from_client: &Vec<CipherSuite>) -> Result<CipherSuite> {
+pub fn select_cipher_suite(
+    cipher_suites_from_client: &Vec<CipherSuite>,
+    extensions: &Vec<Extension>,
+) -> Result<CipherSuite> {
+    let client_ec_curves = get_client_supported_named_curves(extensions)?;
+    let can_use_ecdhe: bool;
+
+    // if SupportedGroups was sent, then we need to make sure we have supported curves to use ECDH
+    if let Some(sg) = client_ec_curves {
+        can_use_ecdhe = sg.iter().any(|nc| !matches!(nc, NamedCurve::Unknown));
+    } else {
+        can_use_ecdhe = true; // no extension was sent, we assume that basic curves are used
+    }
+
     for cipher in SUPPORTED_CIPHER_SUITES.iter() {
-        if cipher_suites_from_client.contains(cipher) {
-            return Ok(*cipher);
+        if !cipher_suites_from_client.contains(cipher) {
+            continue;
         }
+
+        if !can_use_ecdhe && matches!(cipher.config()?.key_exchange, KeyExchangeAlgorithm::Ecdhe) {
+            continue; // no matching curve
+        }
+
+        return Ok(*cipher);
     }
 
     Err(Alert::handshake_failure())

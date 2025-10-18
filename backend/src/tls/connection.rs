@@ -170,7 +170,7 @@ impl Connection {
     }
 
     fn send_server_hello(&mut self, client_hello: &ClientHello) -> Result<Vec<u8>> {
-        let cipher_suite = cipher_suite::select_cipher_suite(&client_hello.cipher_suites)?;
+        let cipher_suite = cipher_suite::select_cipher_suite(&client_hello.cipher_suites, &client_hello.extensions)?;
         let mut extensions = extensions::filter_extensions(&client_hello.extensions);
 
         self.cipher_suite = Some(cipher_suite.config()?);
@@ -219,7 +219,13 @@ impl Connection {
         self.send_fragment(ContentTypeWithContent::Handshake(handshake))
     }
 
-    fn send_server_key_exchange(&mut self) -> Result<Vec<u8>> {
+    fn send_server_key_exchange_ecdhe(&mut self, extensions: &[Extension]) -> Result<Vec<u8>> {
+        let curve = cipher_suite::select_ec_curve(extensions)?;
+
+        self.cipher_suite.unwrap().ec_curve = Some(curve);
+
+        todo!();
+
         Ok(Vec::new())
     }
 
@@ -248,7 +254,7 @@ impl Connection {
             }
             KeyExchangeAlgorithm::Rsa => {} // no ServerKeyExchange needed
             KeyExchangeAlgorithm::Ecdhe => {
-                bytes = self.send_server_key_exchange()?;
+                bytes = self.send_server_key_exchange_ecdhe(&client_hello.extensions)?;
                 self.handshake_messages.append(&mut bytes);
             }
         }

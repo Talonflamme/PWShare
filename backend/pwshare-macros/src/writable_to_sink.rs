@@ -1,7 +1,7 @@
 use crate::*;
 use proc_macro2::TokenStream;
-use quote::{ToTokens, quote};
-use syn::{Data, DataEnum, DataStruct, DeriveInput, Fields, LitStr};
+use quote::{quote, ToTokens};
+use syn::{Data, DataEnum, DataStruct, DeriveInput, Fields};
 
 fn impl_writable_to_sink_struct(
     data_struct: &DataStruct,

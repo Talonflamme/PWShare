@@ -1,8 +1,10 @@
+use crate::cryptography::elliptic_curves::curve::EllipticCurve;
 use super::mac::MACAlgorithm;
 use super::prf::PRFAlgorithm;
 use crate::tls::connection_state::compression_method::CompressionMethod;
 use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::ciphers::cipher_suite::CipherSuite;
+use crate::tls::record::key_exchange::ecdhe::elliptic_curve::ECCurve;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ConnectionEnd {
