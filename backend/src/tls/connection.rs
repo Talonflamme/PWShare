@@ -22,6 +22,7 @@ use once_cell::sync::Lazy;
 use std::fs;
 use std::io::{Error, ErrorKind, Write};
 use std::net::TcpStream;
+use crate::cryptography::elliptic_curves::ECDHPrivateKey;
 
 pub static RSA_KEY: Lazy<Result<RSAPrivateKey>> = Lazy::new(|| {
     let key_content = fs::read_to_string("key.pem")
@@ -223,8 +224,8 @@ impl Connection {
         self.cipher_suite.unwrap().ec_curve = Some(curve);
 
         let curve = curve.curve()?;
-
-        todo!();
+        
+        let private_key = ECDHPrivateKey::generate(&curve);
 
         Ok(Vec::new())
     }

@@ -1,4 +1,4 @@
-use crate::cryptography::elliptic_curves::curve::{ECPoint, EllipticCurve};
+use crate::cryptography::elliptic_curves::curve::{ECPoint, EllipticCurve, EllipticCurveConstants};
 use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
@@ -74,8 +74,9 @@ impl NamedCurve {
                     0xffffffed, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
                     0xffffffff, 0x7fffffff,
                 ]), // 2^255 - 19
-                a: BigUint::from(486662_u32),
-                b: BigUint::ZERO, // unused in Montgomery form
+                constants: EllipticCurveConstants::Montgomery {
+                    A: BigUint::from(486662_u32),
+                },
                 n: BigUint::new(vec![
                     0x5cf5d3ed, 0x5812631a, 0xa2f79cd6, 0x14def9de, 0x0, 0x0, 0x0, 0x10000000,
                 ]), // 2^252 + 0x14def9dea2f79cd65812631a5cf5d3ed
