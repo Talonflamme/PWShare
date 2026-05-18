@@ -39,8 +39,8 @@ fn handle_client(stream: TcpStream) -> Result<(), IOErrorOrTLSError> {
     if let Err(err) = connection.start_handshake() {
         match err {
             IOErrorOrTLSError::TLSError(alert) => {
-                eprintln!("Alert: {:?}", alert);
-                connection.send_alert(alert)?
+                eprintln!("RECEIVED Alert: {:?}", alert);
+                connection.send_alert(alert)? // TODO Does this make sense?
             }
             IOErrorOrTLSError::IOError(io_err) => eprintln!("IO Error: {}", io_err),
         }
@@ -62,7 +62,7 @@ fn handle_client_and_error(stream: TcpStream) {
     }
 }
 
-// Command to do a TLS handshake: openssl s_client -connect 127.0.0.1:4981 -tls1_2 -servername localhost -state -cipher AES128-GCM-SHA256 -trace -debug
+// Command to do a TLS handshake: openssl s_client -connect 127.0.0.1:4981 -tls1_2 -servername localhost -state -cipher ECDHE-RSA-AES128-SHA256 -trace -debug
 // Command to host server: proj && cd PWShare/backend && openssl s_server -key key.pem -cert cert.pem -accept 8443
 pub fn start_server() -> Result<(), IOErrorOrTLSError> {
     let listener = TcpListener::bind("127.0.0.1:4981")?;

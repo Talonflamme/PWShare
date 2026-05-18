@@ -1,3 +1,4 @@
+use crate::cryptography::elliptic_curves::ECDHPrivateKey;
 use crate::cryptography::pem::FromPemContent;
 use crate::cryptography::pkcs1_v1_5;
 use crate::cryptography::rsa::RSAPrivateKey;
@@ -12,17 +13,20 @@ use crate::tls::record::ciphers::key_exchange_algorithm::KeyExchangeAlgorithm;
 use crate::tls::record::fragmentation::tls_ciphertext::TLSCiphertext;
 use crate::tls::record::fragmentation::tls_plaintext::{ContentTypeWithContent, TLSPlaintext};
 use crate::tls::record::hello::extensions::{Extension, ExtensionType, RenegotiationInfoExtension};
-use crate::tls::record::hello::{extensions, ClientHello, ServerHello, SessionID, ServerHelloDone};
+use crate::tls::record::hello::{extensions, ClientHello, ServerHello, ServerHelloDone, SessionID};
+use crate::tls::record::key_exchange::ecdhe::elliptic_curve::ServerECDHParams;
 use crate::tls::record::key_exchange::rsa::PreMasterSecret;
+use crate::tls::record::key_exchange::server_key_exchange::ServerKeyExchangeEcDiffieHellman;
 use crate::tls::record::protocol_version::ProtocolVersion;
-use crate::tls::record::{ClientKeyExchange, Finished, Handshake, HandshakeType, Random};
+use crate::tls::record::{
+    ClientKeyExchange, Finished, Handshake, HandshakeType, Random, ServerKeyExchange,
+};
 use crate::tls::tls_main::IOErrorOrTLSError;
 use crate::tls::WritableToSink;
 use once_cell::sync::Lazy;
 use std::fs;
 use std::io::{Error, ErrorKind, Write};
 use std::net::TcpStream;
-use crate::cryptography::elliptic_curves::ECDHPrivateKey;
 
 pub static RSA_KEY: Lazy<Result<RSAPrivateKey>> = Lazy::new(|| {
     let key_content = fs::read_to_string("key.pem")
@@ -169,7 +173,10 @@ impl Connection {
     }
 
     fn send_server_hello(&mut self, client_hello: &ClientHello) -> Result<Vec<u8>> {
-        let cipher_suite = cipher_suite::select_cipher_suite(&client_hello.cipher_suites, &client_hello.extensions)?;
+        let cipher_suite = cipher_suite::select_cipher_suite(
+            &client_hello.cipher_suites,
+            &client_hello.extensions,
+        )?;
         let mut extensions = extensions::filter_extensions(&client_hello.extensions);
 
         self.cipher_suite = Some(cipher_suite.config()?);
@@ -219,15 +226,30 @@ impl Connection {
     }
 
     fn send_server_key_exchange_ecdhe(&mut self, extensions: &[Extension]) -> Result<Vec<u8>> {
-        let curve = cipher_suite::select_ec_curve(extensions)?;
+        let named_curve = cipher_suite::select_ec_curve(extensions)?;
 
-        self.cipher_suite.unwrap().ec_curve = Some(curve);
+        self.cipher_suite.unwrap().ec_curve = Some(named_curve);
 
-        let curve = curve.curve()?;
-        
+        let curve = named_curve.curve()?;
+
         let private_key = ECDHPrivateKey::generate(&curve);
+        let public_key = private_key.public(&curve);
 
-        Ok(Vec::new())
+        let server_ecdh_params = ServerECDHParams::from_curve_and_key(named_curve, &public_key)?;
+        let signature_alg = self.cipher_suite.as_ref().unwrap().signature;
+        let hash_alg = self.cipher_suite.as_ref().unwrap().hash;
+
+        let mut params_bytes = Vec::new();
+        server_ecdh_params.write(&mut params_bytes, self.cipher_suite.as_ref())?;
+
+        let server_key_exchange =
+            ServerKeyExchange::EcDiffieHellman(ServerKeyExchangeEcDiffieHellman {
+                params: server_ecdh_params,
+                signed_params: signature_alg.sign(&params_bytes, hash_alg)?,
+            });
+
+        let handshake = Handshake::new(HandshakeType::ServerKeyExchange(server_key_exchange));
+        self.send_fragment(ContentTypeWithContent::Handshake(handshake))
     }
 
     fn send_server_hello_done(&mut self) -> Result<Vec<u8>> {
@@ -325,7 +347,7 @@ impl Connection {
         client_key_exchange: ClientKeyExchange,
     ) -> Result<PreMasterSecret> {
         let key = RSA_KEY.as_ref()?;
-        
+
         client_key_exchange.exchange_keys.pre_master_secret.decrypt(
             move |bytes| {
                 let padded = key

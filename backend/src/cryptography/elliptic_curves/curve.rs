@@ -1,9 +1,9 @@
+use crate::cryptography::rsa::modular_arithmetic::ModularArithmetic;
 use num_bigint::BigUint;
 use num_traits::One;
-use crate::cryptography::rsa::modular_arithmetic::ModularArithmetic;
 
 #[derive(Debug, Clone)]
-pub struct ECPoint {
+pub struct Point {
     pub x: BigUint,
     pub y: BigUint,
 }
@@ -33,7 +33,7 @@ pub struct EllipticCurve {
     /// to `ceil(255 / 8) = 32`.
     pub coordinate_length: usize,
     /// The base point `G`, also Generator Point.
-    pub G: ECPoint,
+    pub G: Point,
     pub constants: EllipticCurveConstants,
     /// Base point order `n`.
     pub n: BigUint,
@@ -43,11 +43,12 @@ pub struct EllipticCurve {
 
 #[allow(non_snake_case)]
 impl EllipticCurve {
-    pub fn scalar_multiply(&self, scalar: &BigUint, point: ECPoint) -> BigUint {
+    pub fn scalar_multiply(&self, scalar: &BigUint, point: Point) -> Point {
         match &self.constants {
-            EllipticCurveConstants::Montgomery { A } => {
-                self.scalar_multiply_montgomery(scalar, point.x, A)
-            }
+            EllipticCurveConstants::Montgomery { A } => Point {
+                x: self.scalar_multiply_montgomery(scalar, point.x, A),
+                y: BigUint::ZERO, // For montgomery curves, only the X coordinate is used
+            },
             EllipticCurveConstants::Weierstrass { a, b } => {
                 todo!()
             }

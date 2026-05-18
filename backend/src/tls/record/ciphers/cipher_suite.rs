@@ -228,6 +228,8 @@ pub const SUPPORTED_EC_CURVES: [NamedCurve; 5] = [
 /// Returns an `Err` when decoding the extension fails. If this extension is not present,
 /// an `Ok(None)` will be returned, as the parsing did not fail, but there simply was no
 /// such extension in `extensions`.
+///
+/// See [RFC 8422](https://datatracker.ietf.org/doc/html/rfc8422#section-5.1.1)
 fn get_client_supported_named_curves(extensions: &[Extension]) -> Result<Option<&NamedCurveList>> {
     for ex in extensions.iter() {
         if let ExtensionType::SupportedGroups(sg) = &ex.extension_type {
