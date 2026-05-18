@@ -65,7 +65,10 @@ fn handle_client_and_error(stream: TcpStream) {
 // Command to do a TLS handshake: openssl s_client -connect 127.0.0.1:4981 -tls1_2 -servername localhost -state -cipher ECDHE-RSA-AES128-SHA256 -trace -debug
 // Command to host server: proj && cd PWShare/backend && openssl s_server -key key.pem -cert cert.pem -accept 8443
 pub fn start_server() -> Result<(), IOErrorOrTLSError> {
-    let listener = TcpListener::bind("127.0.0.1:4981")?;
+    let addr = "127.0.0.1:4981";
+    let listener = TcpListener::bind(addr)?;
+
+    println!("Started server... listening to {}", addr);
 
     for stream in listener.incoming() {
         match stream {
