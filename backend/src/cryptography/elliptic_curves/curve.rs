@@ -37,7 +37,7 @@ pub struct EllipticCurve {
     pub constants: EllipticCurveConstants,
     /// Base point order `n`.
     pub n: BigUint,
-    /// The Prime `p`.
+    /// The Prime `p`. All arithmetic happens modulo `p`.
     pub p: BigUint,
 }
 
@@ -46,7 +46,7 @@ impl EllipticCurve {
     pub fn scalar_multiply(&self, scalar: &BigUint, point: ECPoint) -> BigUint {
         match &self.constants {
             EllipticCurveConstants::Montgomery { A } => {
-                self.scalar_multiply_montgomery(scalar, point, A)
+                self.scalar_multiply_montgomery(scalar, point.x, A)
             }
             EllipticCurveConstants::Weierstrass { a, b } => {
                 todo!()
@@ -54,14 +54,14 @@ impl EllipticCurve {
         }
     }
 
-    fn scalar_multiply_montgomery(&self, scalar: &BigUint, point: ECPoint, A: &BigUint) -> BigUint {
-        let x_1 = point.x.clone();
+    fn scalar_multiply_montgomery(&self, scalar: &BigUint, u: BigUint, A: &BigUint) -> BigUint {
+        let x_1 = u.clone();
         let mut x_2 = BigUint::one();
         let mut z_2 = BigUint::ZERO;
-        let mut x_3 = point.x;
+        let mut x_3 = u;
         let mut z_3 = BigUint::one();
         let mut swap = false;
-        let bits = self.n.bits();
+        let bits = self.p.bits();
         let two = BigUint::from(2u32);
 
         let a24 = (A - &two) / BigUint::from(4u8);
@@ -99,7 +99,7 @@ impl EllipticCurve {
             x_3 = DA.addm(&CB, p).modpow(&two, p);
             z_3 = x_1.mulm(&DA.subm(&CB, p).modpow(&two, p), p);
             x_2 = AA.mulm(&BB, p);
-            z_2 = E.mulm(&AA.addm(&a24, p).mulm(&E, p), p);
+            z_2 = E.mulm(&AA.addm(&a24.mulm(&E, p), p), p);
         }
 
         (x_2, x_3) = cswap!(swap, x_2, x_3);

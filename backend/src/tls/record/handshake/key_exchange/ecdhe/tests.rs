@@ -3,6 +3,7 @@ use crate::cryptography::elliptic_curves::curve::*;
 use crate::tls::record::key_exchange::ecdhe::elliptic_curve::{NamedCurve, PointConversionForm};
 use num_bigint::BigUint;
 use num_traits::Num;
+use crate::util::bytes_from_hex;
 
 #[test]
 fn test_x25519_params() {
@@ -33,9 +34,9 @@ fn test_x25519_scalar_multiply() {
 
     let point = ECPoint { x: u, y: BigUint::ZERO };
 
-    let output = curve.scalar_multiply(&scalar, point);
+    let output = curve. scalar_multiply(&scalar, point);
 
-    let expected_output = BigUint::from_str_radix("c3da55379de9c6908e94ea4df28d084f32eccf03491c71f754b4075577a28552", 16).unwrap();
+    let expected_output = BigUint::from_bytes_le(&bytes_from_hex("c3da55379de9c6908e94ea4df28d084f32eccf03491c71f754b4075577a28552"));
 
     assert_eq!(output, expected_output);
 }
