@@ -239,13 +239,34 @@ impl Connection {
         let signature_alg = self.cipher_suite.as_ref().unwrap().signature;
         let hash_alg = self.cipher_suite.as_ref().unwrap().hash;
 
-        let mut params_bytes = Vec::new();
-        server_ecdh_params.write(&mut params_bytes, self.cipher_suite.as_ref())?;
+        // ClientHello.random || ServerHello.random || ServerKeyExchange.params
+        let mut bytes_to_be_signed = Vec::new();
+
+        // concat ClientHello.random
+        bytes_to_be_signed.extend_from_slice(
+            self.connection_states
+                .pending_parameters
+                .client_random
+                .as_ref()
+                .unwrap(),
+        );
+
+        // concat ServerHello.random
+        bytes_to_be_signed.extend_from_slice(
+            self.connection_states
+                .pending_parameters
+                .server_random
+                .as_ref()
+                .unwrap(),
+        );
+
+        // concat ServerKeyExchange.params
+        server_ecdh_params.write(&mut bytes_to_be_signed, self.cipher_suite.as_ref())?;
 
         let server_key_exchange =
             ServerKeyExchange::EcDiffieHellman(ServerKeyExchangeEcDiffieHellman {
                 params: server_ecdh_params,
-                signed_params: signature_alg.sign(&params_bytes, hash_alg)?,
+                signed_params: signature_alg.sign(&bytes_to_be_signed, hash_alg)?,
             });
 
         let handshake = Handshake::new(HandshakeType::ServerKeyExchange(server_key_exchange));
@@ -354,7 +375,7 @@ impl Connection {
                     .decrypt_bytes(bytes.as_slice())
                     .map_err(|_| Alert::decrypt_error())?;
 
-                let message = pkcs1_v1_5::unpad(&padded, key.size_in_bytes())
+                let message = pkcs1_v1_5::unpad(&padded, key.size_in_bytes(), pkcs1_v1_5::PKCS1v1_5Mode::Encryption)
                     .map_err(|_| Alert::decrypt_error())?;
 
                 Ok(message)

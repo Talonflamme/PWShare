@@ -1,7 +1,6 @@
 use crate::cryptography::elliptic_curves::curve::{EllipticCurve, EllipticCurveConstants, Point};
 use crate::cryptography::elliptic_curves::ECDHPublicKey;
 use crate::tls::record::alert::{Alert, Result};
-use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use num_bigint::BigUint;
