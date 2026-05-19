@@ -92,8 +92,6 @@ pub fn sign(
 
     let hash = hasher.hash(message);
 
-    println!("Hash {}", hash.hex());
-
     let digest_info = DigestInfo {
         digest_algorithm_oid: identifier,
         digest: hash,
@@ -101,19 +99,13 @@ pub fn sign(
 
     let asn1der = digest_info.to_asn1_der();
 
-    println!("digest i {}", asn1der.hex());
-
     let padded = pkcs1_v1_5::pad(&asn1der, key.size_in_bytes(), PKCS1v1_5Mode::Signature)
         .map_err(|_| Alert::internal_error("Padding using PKCS1 v1.5 failed"))?;
     let message = BigUint::from_bytes_be(&padded);
 
-    println!("pad {}", padded.hex());
-
     let sig = key
         .decrypt(message)
         .map_err(|_| Alert::internal_error("Signing failed due to message being out of range"))?;
-
-    println!("{}", sig.hex());
 
     Ok(sig.to_bytes_be())
 }
