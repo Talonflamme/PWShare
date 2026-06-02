@@ -1,8 +1,9 @@
 use super::hello::{ClientHello, HelloRequest, ServerHello, ServerHelloDone};
 use super::{
-    CertificateRequest, CertificateVerify, ClientKeyExchange, Finished,
+    CertificateRequest, CertificateVerify, Finished,
     ServerKeyExchange,
 };
+use super::key_exchange::client_key_exchange::ClientKeyExchange;
 use crate::tls::record::certificate::Certificate;
 use crate::tls::record::writable_to_sink::{Sink, WritableToSink};
 use crate::tls::ReadableFromStream;

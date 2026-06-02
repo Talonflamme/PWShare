@@ -14,13 +14,12 @@ use crate::tls::record::fragmentation::tls_ciphertext::TLSCiphertext;
 use crate::tls::record::fragmentation::tls_plaintext::{ContentTypeWithContent, TLSPlaintext};
 use crate::tls::record::hello::extensions::{Extension, ExtensionType, RenegotiationInfoExtension};
 use crate::tls::record::hello::{extensions, ClientHello, ServerHello, ServerHelloDone, SessionID};
+use crate::tls::record::key_exchange::client_key_exchange::{ClientKeyExchange, ExchangeKeys};
 use crate::tls::record::key_exchange::ecdhe::elliptic_curve::ServerECDHParams;
 use crate::tls::record::key_exchange::rsa::PreMasterSecret;
 use crate::tls::record::key_exchange::server_key_exchange::ServerKeyExchangeEcDiffieHellman;
 use crate::tls::record::protocol_version::ProtocolVersion;
-use crate::tls::record::{
-    ClientKeyExchange, Finished, Handshake, HandshakeType, Random, ServerKeyExchange,
-};
+use crate::tls::record::{Finished, Handshake, HandshakeType, Random, ServerKeyExchange};
 use crate::tls::tls_main::IOErrorOrTLSError;
 use crate::tls::WritableToSink;
 use once_cell::sync::Lazy;
@@ -369,19 +368,23 @@ impl Connection {
     ) -> Result<PreMasterSecret> {
         let key = RSA_KEY.as_ref()?;
 
-        client_key_exchange.exchange_keys.pre_master_secret.decrypt(
-            move |bytes| {
-                let padded = key
-                    .decrypt_bytes(bytes.as_slice())
-                    .map_err(|_| Alert::decrypt_error())?;
-
-                let message = pkcs1_v1_5::unpad(&padded, key.size_in_bytes(), pkcs1_v1_5::PKCS1v1_5Mode::Encryption)
-                    .map_err(|_| Alert::decrypt_error())?;
-
-                Ok(message)
-            },
-            self.cipher_suite.as_ref(),
-        )
+        match self.cipher_suite.as_ref().unwrap().key_exchange {
+            KeyExchangeAlgorithm::Null => Err(Alert::internal_error(
+                "KeyExchange null not implemented; should not come here",
+            )),
+            KeyExchangeAlgorithm::Rsa => {
+                let key = RSA_KEY.as_ref()?;
+                if let ExchangeKeys::Rsa(exchange_keys) = client_key_exchange.exchange_keys {
+                    exchange_keys.decrypt_rsa(key, self.cipher_suite.as_ref())
+                } else {
+                    Err(Alert::internal_error(format!(
+                        "Key Exchange is RSA, but exchange keys is {:?}",
+                        client_key_exchange.exchange_keys
+                    )))
+                }
+            }
+            KeyExchangeAlgorithm::Ecdhe => Err(Alert::decode_error()),
+        }
     }
 
     fn convert_pre_master_to_master(

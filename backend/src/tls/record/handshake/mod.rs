@@ -1,7 +1,6 @@
 pub use handshake::*;
 pub use key_exchange::server_key_exchange::ServerKeyExchange;
 pub use certificate_request::CertificateRequest;
-pub use key_exchange::client_key_exchange::ClientKeyExchange;
 pub use certificate_verify::CertificateVerify;
 pub use finished::Finished;
 pub use random::Random;

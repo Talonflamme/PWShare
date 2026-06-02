@@ -1,5 +1,9 @@
+use crate::cryptography::pkcs1_v1_5;
+use crate::cryptography::rsa::RSAPrivateKey;
 use crate::tls::connection_state::prf::PRFAlgorithm;
 use crate::tls::connection_state::security_parameters::SecurityParameters;
+use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::ciphers::cipher_suite::{CipherConfig, CipherSuite};
 use crate::tls::record::cryptographic_attributes::PublicKeyEncrypted;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::util::UintDisplay;
@@ -9,6 +13,32 @@ use std::fmt::{Debug, Formatter};
 #[derive(Debug, ReadableFromStream, WritableToSink)]
 pub struct EncryptedPreMasterSecret {
     pub pre_master_secret: PublicKeyEncrypted<PreMasterSecret>,
+}
+
+impl EncryptedPreMasterSecret {
+    pub fn decrypt_rsa(
+        self,
+        key: &RSAPrivateKey,
+        cipher_config: Option<&CipherConfig>,
+    ) -> Result<PreMasterSecret> {
+        self.pre_master_secret.decrypt(
+            move |bytes| {
+                let padded = key
+                    .decrypt_bytes(bytes.as_slice())
+                    .map_err(|_| Alert::decrypt_error())?;
+
+                let message = pkcs1_v1_5::unpad(
+                    &padded,
+                    key.size_in_bytes(),
+                    pkcs1_v1_5::PKCS1v1_5Mode::Encryption,
+                )
+                .map_err(|_| Alert::decrypt_error())?;
+
+                Ok(message)
+            },
+            cipher_config,
+        )
+    }
 }
 
 #[repr(C)]
@@ -35,7 +65,11 @@ impl PreMasterSecret {
 
         let phash = prf.prf(&pre_master, "master secret", seed.as_slice());
 
-        phash.take(48).collect::<Vec<u8>>().try_into().expect("Not enough bytes for master secret")
+        phash
+            .take(48)
+            .collect::<Vec<u8>>()
+            .try_into()
+            .expect("Not enough bytes for master secret")
     }
 }
 
