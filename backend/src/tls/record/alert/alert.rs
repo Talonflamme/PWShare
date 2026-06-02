@@ -163,6 +163,7 @@ impl Alert {
         }
     }
 
+    // TODO: add caller and line here
     #[inline]
     pub fn internal_error<S: Into<String>>(err: S) -> Self {
         Self {

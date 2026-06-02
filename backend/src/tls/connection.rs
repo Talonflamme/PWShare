@@ -1,6 +1,5 @@
 use crate::cryptography::elliptic_curves::ECDHPrivateKey;
 use crate::cryptography::pem::FromPemContent;
-use crate::cryptography::pkcs1_v1_5;
 use crate::cryptography::rsa::RSAPrivateKey;
 use crate::tls::connection_state::compression_method::CompressionMethod;
 use crate::tls::connection_state::connection_state::ConnectionState;
@@ -15,8 +14,7 @@ use crate::tls::record::fragmentation::tls_plaintext::{ContentTypeWithContent, T
 use crate::tls::record::hello::extensions::{Extension, ExtensionType, RenegotiationInfoExtension};
 use crate::tls::record::hello::{extensions, ClientHello, ServerHello, ServerHelloDone, SessionID};
 use crate::tls::record::key_exchange::client_key_exchange::{ClientKeyExchange, ExchangeKeys};
-use crate::tls::record::key_exchange::ecdhe::elliptic_curve::ServerECDHParams;
-use crate::tls::record::key_exchange::rsa::PreMasterSecret;
+use crate::tls::record::key_exchange::ecdhe::elliptic_curve::{NamedCurve, ServerECDHParams};
 use crate::tls::record::key_exchange::server_key_exchange::ServerKeyExchangeEcDiffieHellman;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::{Finished, Handshake, HandshakeType, Random, ServerKeyExchange};
@@ -26,6 +24,8 @@ use once_cell::sync::Lazy;
 use std::fs;
 use std::io::{Error, ErrorKind, Write};
 use std::net::TcpStream;
+use crate::tls::record::key_exchange::pre_master_secret::PreMasterSecret;
+use crate::util::UintDisplay;
 
 pub static RSA_KEY: Lazy<Result<RSAPrivateKey>> = Lazy::new(|| {
     let key_content = fs::read_to_string("key.pem")
@@ -103,6 +103,11 @@ pub struct Connection {
     is_closed: bool,
     /// A bool indicating if a handshake was successfully performed. Defaults to `false`.
     is_handshake_done: bool,
+    /// The ECDH private key that is used during negotiation if KeyExchange is ECDH/ECDHE.
+    /// This value can always be None, except in between sending `ServerKeyExchange` and computing
+    /// the PreMasterSecret (after receiving `ClientKeyExchange`). Before that, or even after,
+    /// this value may be None.
+    ecdh_private_key: Option<(NamedCurve, ECDHPrivateKey)>,
 }
 
 impl Connection {
@@ -120,6 +125,7 @@ impl Connection {
             handshake_messages: Vec::new(),
             is_closed: false,
             is_handshake_done: true,
+            ecdh_private_key: None,
         }
     }
 
@@ -269,6 +275,9 @@ impl Connection {
             });
 
         let handshake = Handshake::new(HandshakeType::ServerKeyExchange(server_key_exchange));
+
+        self.ecdh_private_key = Some((named_curve, private_key));
+
         self.send_fragment(ContentTypeWithContent::Handshake(handshake))
     }
 
@@ -366,12 +375,11 @@ impl Connection {
         &mut self,
         client_key_exchange: ClientKeyExchange,
     ) -> Result<PreMasterSecret> {
-        let key = RSA_KEY.as_ref()?;
-
         match self.cipher_suite.as_ref().unwrap().key_exchange {
             KeyExchangeAlgorithm::Null => Err(Alert::internal_error(
                 "KeyExchange null not implemented; should not come here",
             )),
+
             KeyExchangeAlgorithm::Rsa => {
                 let key = RSA_KEY.as_ref()?;
                 if let ExchangeKeys::Rsa(exchange_keys) = client_key_exchange.exchange_keys {
@@ -383,7 +391,28 @@ impl Connection {
                     )))
                 }
             }
-            KeyExchangeAlgorithm::Ecdhe => Err(Alert::decode_error()),
+
+            KeyExchangeAlgorithm::Ecdhe => {
+                if let ExchangeKeys::Ecdh(exchange_keys) = client_key_exchange.exchange_keys {
+                    // `take`, forget private key after
+                    let (curve, private_key) = self.ecdh_private_key.take().ok_or_else(|| {
+                        Alert::internal_error(
+                            "ECDH key is None when computing PreMasterSecret of Kx ECDH",
+                        )
+                    })?;
+
+                    let res = exchange_keys.compute_pre_master(
+                        &private_key,
+                        curve,
+                    );
+                    res
+                } else {
+                    Err(Alert::internal_error(format!(
+                        "Key Exchange is ECDH, but exchange key is {:?}",
+                        client_key_exchange.exchange_keys
+                    )))
+                }
+            }
         }
     }
 
@@ -411,6 +440,7 @@ impl Connection {
         self.handshake_messages.append(&mut bytes);
 
         let pre_master = self.decode_pre_master_secret(client_key_exchange)?;
+
         let master = self.convert_pre_master_to_master(pre_master)?;
 
         self.connection_states.pending_parameters.master_secret = Some(master);

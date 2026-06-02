@@ -1,18 +1,15 @@
 use crate::cryptography::pkcs1_v1_5;
 use crate::cryptography::rsa::RSAPrivateKey;
-use crate::tls::connection_state::prf::PRFAlgorithm;
-use crate::tls::connection_state::security_parameters::SecurityParameters;
 use crate::tls::record::alert::{Alert, Result};
-use crate::tls::record::ciphers::cipher_suite::{CipherConfig, CipherSuite};
+use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::record::cryptographic_attributes::PublicKeyEncrypted;
-use crate::tls::record::protocol_version::ProtocolVersion;
-use crate::util::UintDisplay;
+use crate::tls::record::key_exchange::pre_master_secret::{PreMasterSecret, PreMasterSecretRsa};
 use pwshare_macros::{ReadableFromStream, WritableToSink};
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 #[derive(Debug, ReadableFromStream, WritableToSink)]
 pub struct EncryptedPreMasterSecret {
-    pub pre_master_secret: PublicKeyEncrypted<PreMasterSecret>,
+    pub pre_master_secret: PublicKeyEncrypted<PreMasterSecretRsa>,
 }
 
 impl EncryptedPreMasterSecret {
@@ -21,74 +18,24 @@ impl EncryptedPreMasterSecret {
         key: &RSAPrivateKey,
         cipher_config: Option<&CipherConfig>,
     ) -> Result<PreMasterSecret> {
-        self.pre_master_secret.decrypt(
-            move |bytes| {
-                let padded = key
-                    .decrypt_bytes(bytes.as_slice())
+        self.pre_master_secret
+            .decrypt(
+                move |bytes| {
+                    let padded = key
+                        .decrypt_bytes(bytes.as_slice())
+                        .map_err(|_| Alert::decrypt_error())?;
+
+                    let message = pkcs1_v1_5::unpad(
+                        &padded,
+                        key.size_in_bytes(),
+                        pkcs1_v1_5::PKCS1v1_5Mode::Encryption,
+                    )
                     .map_err(|_| Alert::decrypt_error())?;
 
-                let message = pkcs1_v1_5::unpad(
-                    &padded,
-                    key.size_in_bytes(),
-                    pkcs1_v1_5::PKCS1v1_5Mode::Encryption,
-                )
-                .map_err(|_| Alert::decrypt_error())?;
-
-                Ok(message)
-            },
-            cipher_config,
-        )
-    }
-}
-
-#[repr(C)]
-#[derive(ReadableFromStream, WritableToSink)]
-pub struct PreMasterSecret {
-    client_version: ProtocolVersion,
-    random: [u8; 46],
-}
-
-impl PreMasterSecret {
-    pub fn convert_to_master(
-        self,
-        prf: &PRFAlgorithm,
-        security_parameters: &SecurityParameters,
-    ) -> [u8; 48] {
-        let pre_master: [u8; 48] = self.into();
-
-        let client_hello_random = security_parameters.client_random.as_ref().unwrap();
-        let server_hello_random = security_parameters.server_random.as_ref().unwrap();
-
-        let mut seed = Vec::with_capacity(client_hello_random.len() + server_hello_random.len());
-        seed.extend_from_slice(client_hello_random);
-        seed.extend_from_slice(server_hello_random);
-
-        let phash = prf.prf(&pre_master, "master secret", seed.as_slice());
-
-        phash
-            .take(48)
-            .collect::<Vec<u8>>()
-            .try_into()
-            .expect("Not enough bytes for master secret")
-    }
-}
-
-impl Into<[u8; 48]> for PreMasterSecret {
-    fn into(self) -> [u8; 48] {
-        //noinspection RsAssertEqual
-        const _: () = assert!(size_of::<PreMasterSecret>() == 48);
-        //noinspection RsAssertEqual
-        const _: () = assert!(align_of::<PreMasterSecret>() == 1);
-
-        let ptr: *const [u8; 48] = &self as *const PreMasterSecret as *const [u8; 48];
-        // this is not actually unsafe as we checked above that the entire size of
-        // PreMasterSecret is 48 and is tightly packed (alignment 1).
-        unsafe { *ptr }
-    }
-}
-
-impl Debug for PreMasterSecret {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{}]", UintDisplay::hex(&self.random.as_slice()))
+                    Ok(message)
+                },
+                cipher_config,
+            )
+            .map(Into::into)
     }
 }

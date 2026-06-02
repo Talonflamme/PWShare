@@ -50,23 +50,99 @@ impl ECPoint {
             // X25519 uses 32 bytes
             // X448 uses 56 bytes
             // Encoding is in little-endian
+            NamedCurve::X25519 | NamedCurve::X448 => Ok(Self {
+                point: Self::encode_x_coordinate(point.x, curve)?
+                    .try_into() // TODO: does this work here?
+                    .unwrap(),
+            }),
+            NamedCurve::Unknown => Err(Alert::internal_error("Unknown curve")),
+        }
+    }
+
+    // TODO: maybe even use one coordinate (BigUint) instead of Point
+    pub fn to_point(self, curve: NamedCurve) -> Result<Point> {
+        match curve {
+            // Weierstrass curves are encoded with the UncompressedPointRepresentation struct
+            // the points are implicitly sized based on the curve. The amount of bytes used
+            // for encoding is the same as the bytes used for 'p' of the curve. This format
+            // uses big-endian.
+            NamedCurve::SECP256R1 | NamedCurve::SECP384R1 | NamedCurve::SECP521R1 => {
+                let mut stream = Into::<Vec<u8>>::into(self.point).into_iter();
+                let upr = UncompressedPointRepresentation::read(&mut stream, &curve)?;
+                Ok(Point { x: upr.x, y: upr.y })
+            }
+            // Montgomery Curves only encode the X coordinate (sometimes 'u') because only it is
+            // used as a public key (since Montgomery ladder only requires the x)
+            // X25519 uses 32 bytes
+            // X448 uses 56 bytes
+            // Encoding is in little-endian
             NamedCurve::X25519 => {
-                let mut slice = [0u8; 32];
-                let x = point.x.to_bytes_le();
-                slice[..x.len()].copy_from_slice(&x);
-                Ok(Self {
-                    point: slice.to_vec().into(),
-                })
+                if self.point.len() != 32 {
+                    Err(Alert::decode_error())
+                } else {
+                    Ok(Point {
+                        x: BigUint::from_bytes_le(&self.point),
+                        y: BigUint::ZERO, // irrelevant
+                    })
+                }
             }
             NamedCurve::X448 => {
-                let mut slice = [0u8; 56];
-                let x = point.x.to_bytes_le();
-                slice[..x.len()].copy_from_slice(&x);
-                Ok(Self {
-                    point: slice.to_vec().into(),
-                })
+                if self.point.len() != 56 {
+                    Err(Alert::decode_error())
+                } else {
+                    Ok(Point {
+                        x: BigUint::from_bytes_le(&self.point),
+                        y: BigUint::ZERO,
+                    })
+                }
             }
             NamedCurve::Unknown => Err(Alert::internal_error("Unknown curve")),
+        }
+    }
+
+    /// Encodes the x coordinate of a point depending on which curve is used.
+    /// For Weirstrass curves, this happens to be big-endian.
+    /// For Montgomery curves, this happens to be little-endian.
+    pub fn encode_x_coordinate(x: BigUint, curve: NamedCurve) -> Result<Vec<u8>> {
+        let size = match curve {
+            NamedCurve::SECP256R1 => 32,
+            NamedCurve::SECP384R1 => 48,
+            NamedCurve::SECP521R1 => 66,
+            NamedCurve::X25519 => 32,
+            NamedCurve::X448 => 56,
+            NamedCurve::Unknown => return Err(Alert::internal_error("Unknown curve")),
+        };
+
+        let mut result = vec![0u8; size];
+        let bytes = match curve {
+            NamedCurve::SECP256R1 | NamedCurve::SECP384R1 | NamedCurve::SECP521R1 => {
+                x.to_bytes_be()
+            }
+            NamedCurve::X25519 | NamedCurve::X448 => x.to_bytes_le(),
+            NamedCurve::Unknown => unreachable!(),
+        };
+
+        result[size - bytes.len()..].copy_from_slice(&bytes);
+        Ok(result)
+    }
+
+    /// When `named_curve` is a Weirstrass curve, checks if the given points sits on the curve.
+    /// Throws an error if it does not, else returns a simple `Ok(())`.
+    /// If `named_curve` is not a Weirstrass curve, checks nothing and simply returns `Ok(())`
+    pub fn verify_weirstrass(point: Point, named_curve: NamedCurve) -> Result<()> {
+        match named_curve {
+            NamedCurve::SECP256R1 | NamedCurve::SECP384R1 | NamedCurve::SECP521R1 => {
+                let curve = named_curve.curve()?;
+                if !curve.is_on_curve(point) {
+                    Err(Alert::illegal_parameter())
+                } else {
+                    Ok(())
+                }
+            }
+            NamedCurve::X25519 | NamedCurve::X448 => {
+                Ok(())
+            }
+            NamedCurve::Unknown => Err(Alert::internal_error("Unknown curve"))
         }
     }
 }

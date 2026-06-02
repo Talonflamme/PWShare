@@ -55,6 +55,33 @@ impl EllipticCurve {
         }
     }
 
+    pub fn is_on_curve(&self, Point { x, y }: Point) -> bool {
+        let two = BigUint::from(2u8);
+        let three = BigUint::from(3u8);
+
+        match &self.constants {
+            EllipticCurveConstants::Montgomery { A } => {
+                // y² = x³ + Ax² + x
+                let x_cubed = x.modpow(&three, &self.p);
+                let x_squared = x.modpow(&two, &self.p);
+                let a_x_squared = A.mulm(&x_squared, &self.p);
+
+                let rhs = x_cubed.addm(&a_x_squared, &self.p).addm(&x, &self.p);
+                let lhs = y.modpow(&two, &self.p);
+                lhs == rhs
+            }
+            EllipticCurveConstants::Weierstrass { a, b } => {
+                // y² = x³ + ax + b
+                let x_cubed = x.modpow(&three, &self.p);
+                let a_x = a.mulm(&x, &self.p);
+
+                let rhs = x_cubed.addm(&a_x, &self.p).addm(b, &self.p);
+                let lhs = y.modpow(&two, &self.p);
+                lhs == rhs
+            }
+        }
+    }
+
     fn scalar_multiply_montgomery(&self, scalar: &BigUint, u: BigUint, A: &BigUint) -> BigUint {
         let x_1 = u.clone();
         let mut x_2 = BigUint::one();
