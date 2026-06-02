@@ -43,7 +43,9 @@ impl ECPoint {
                     y: point.y,
                 }
                 .write(&mut vec, &curve)?;
-                Ok(Self { point: vec.try_into().unwrap() })
+                Ok(Self {
+                    point: vec.try_into().unwrap(),
+                })
             }
             // Montgomery Curves only encode the X coordinate (sometimes 'u') because only it is
             // used as a public key (since Montgomery ladder only requires the x)
@@ -76,23 +78,13 @@ impl ECPoint {
             // X25519 uses 32 bytes
             // X448 uses 56 bytes
             // Encoding is in little-endian
-            NamedCurve::X25519 => {
-                if self.point.len() != 32 {
+            NamedCurve::X25519 | NamedCurve::X448 => {
+                if self.point.len() != curve.curve()?.coordinate_length {
                     Err(Alert::decode_error())
                 } else {
                     Ok(Point {
                         x: BigUint::from_bytes_le(&self.point),
                         y: BigUint::ZERO, // irrelevant
-                    })
-                }
-            }
-            NamedCurve::X448 => {
-                if self.point.len() != 56 {
-                    Err(Alert::decode_error())
-                } else {
-                    Ok(Point {
-                        x: BigUint::from_bytes_le(&self.point),
-                        y: BigUint::ZERO,
                     })
                 }
             }
@@ -104,14 +96,7 @@ impl ECPoint {
     /// For Weirstrass curves, this happens to be big-endian.
     /// For Montgomery curves, this happens to be little-endian.
     pub fn encode_x_coordinate(x: BigUint, curve: NamedCurve) -> Result<Vec<u8>> {
-        let size = match curve {
-            NamedCurve::SECP256R1 => 32,
-            NamedCurve::SECP384R1 => 48,
-            NamedCurve::SECP521R1 => 66,
-            NamedCurve::X25519 => 32,
-            NamedCurve::X448 => 56,
-            NamedCurve::Unknown => return Err(Alert::internal_error("Unknown curve")),
-        };
+        let size = curve.curve()?.coordinate_length;
 
         let mut result = vec![0u8; size];
         let bytes = match curve {
@@ -243,7 +228,26 @@ impl NamedCurve {
                     y: BigUint::ZERO, // unused in Montgomery form
                 },
             }),
-            NamedCurve::X448 => todo!(),
+            NamedCurve::X448 => Ok(EllipticCurve {
+                coordinate_length: 56,
+                p: BigUint::new(vec![
+                    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                    0xffffffff, 0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                    0xffffffff,
+                ]), // 2^448 - 2^224 - 1
+                constants: EllipticCurveConstants::Montgomery {
+                    A: BigUint::from(156326_u32),
+                },
+                n: BigUint::new(vec![
+                    0xab5844f3, 0x2378c292, 0x8dc58f55, 0x216cc272, 0xaed63690, 0xc44edb49,
+                    0x7cca23e9, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                    0xffffffff,
+                ]), // 2^446 - 0x8335dc163bb124b65129c96fde933d8d723a70aadc873d6d54a7bb0d
+                G: Point {
+                    x: BigUint::from(5_u32),
+                    y: BigUint::ZERO,
+                },
+            }),
             NamedCurve::Unknown => Err(Alert::internal_error("Called .curve() on Unknown")),
         }
     }
