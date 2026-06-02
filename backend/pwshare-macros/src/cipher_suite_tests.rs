@@ -37,7 +37,7 @@ pub fn generate_cipher_tests(input: TokenStream) -> TokenStream {
             #[test]
             fn #test_name() {
                 println!("Testing cipher: {:?}", #array_ident[#index]);
-                test_cipher_suite(#array_ident[#index], #index);
+                test_cipher_suite(#array_ident[#index], #index, vec![]);
             }
         }
     });

@@ -26,21 +26,26 @@ def set_cipher(ctx: ssl.SSLContext, cipher: str):
         print("Could not set cipher:", cipher, file=sys.stderr)
         exit(1)
 
-
 @click.command()
 @click.option("-h", "--host", type=str, default="localhost", help="Server hostname", show_default=True)
 @click.option("-p", "--port", type=int, help="Port number", default=4981, show_default=True)
 @click.option("-c", "--cipher", type=str,
               help="Cipher. Either use the OpenSSL name or a 2-byte code value (with 0 padding). E.g: '0035'",
               required=True)
+@click.option("--curve", type=str, default=None,
+              help="ECDH curve name (OpenSSL format, e.g. 'prime256v1', 'secp384r1'). Uses OpenSSL default if not set.",
+              show_default=True)
 @click.option("-e", "--expect", type=str, help="What text to expect to receive from the server",
               default="Hello World!", show_default=True)
 @click.option("-s", "--send", type=str, help="What to send to the server", default=None, show_default=True)
 @click.option("-d", "--delay", type=int, help="Delay in ms to wait before connecting", default=0, show_default=True)
-def cli(host: str, port: int, cipher: str, expect: str, send: str | None, delay: int):
+def cli(host: str, port: int, cipher: str, curve: str | None, expect: str, send: str | None, delay: int):
     context = ssl.create_default_context()
 
     set_cipher(context, cipher)
+
+    if curve is not None:
+        context.set_ecdh_curve(curve)
 
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE

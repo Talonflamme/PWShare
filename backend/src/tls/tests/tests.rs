@@ -1,6 +1,7 @@
 use crate::tls::connection::Connection;
 use crate::tls::record::ciphers::cipher_suite::{CipherSuite, SUPPORTED_CIPHER_SUITES};
 use pwshare_macros::generate_cipher_suite_tests;
+use std::ffi::OsStr;
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::process::Command;
@@ -32,7 +33,7 @@ fn test_cipher_suite_handle_client(
     assert_eq!(message_to_receive.into_bytes(), recv);
 }
 
-fn test_cipher_suite(cipher_suite: CipherSuite, index: usize) {
+fn test_cipher_suite(cipher_suite: CipherSuite, index: usize, args: Vec<&str>) {
     let port = 7810 + index;
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap();
 
@@ -62,6 +63,7 @@ fn test_cipher_suite(cipher_suite: CipherSuite, index: usize) {
         .arg(&message_to_receive)
         .arg("--delay")
         .arg("500") // 500ms
+        .args(args)
         .spawn()
         .expect("Failed to start Python script");
 
@@ -106,3 +108,42 @@ fn test_cipher_suite(cipher_suite: CipherSuite, index: usize) {
 }
 
 generate_cipher_suite_tests!(SUPPORTED_CIPHER_SUITES, 7);
+
+fn test_ecdhe(curve: &str, index: usize) {
+    println!(
+        "Testing {} with {:?}",
+        curve,
+        CipherSuite::TlsEcdheRsaWithAes128CbcSha256
+    );
+
+    test_cipher_suite(
+        CipherSuite::TlsEcdheRsaWithAes128CbcSha256,
+        SUPPORTED_CIPHER_SUITES.len() + index,
+        vec!["--curve", curve],
+    );
+}
+
+#[test]
+fn test_ecdhe_x25519() {
+    test_ecdhe("X25519", 0);
+}
+
+#[test]
+fn test_ecdhe_x448() {
+    test_ecdhe("X448", 1);
+}
+
+#[test]
+fn test_ecdhe_secp256r1() {
+    test_ecdhe("prime256v1", 2);
+}
+
+#[test]
+fn test_ecdhe_secp384r1() {
+    test_ecdhe("secp384r1", 3);
+}
+
+#[test]
+fn test_ecdhe_secp521r1() {
+    test_ecdhe("secp521r1", 4);
+}
