@@ -1,6 +1,7 @@
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::record::alert::{Alert, Result};
 use crate::tls::record::change_cipher_spec::ChangeCipherSpec;
+use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
@@ -8,7 +9,6 @@ use crate::tls::record::Handshake;
 use crate::tls::{ReadableFromStream, WritableToSink};
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Formatter};
-use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ReadableFromStream, WritableToSink)]
@@ -58,7 +58,11 @@ impl Debug for TLSPlaintext {
 }
 
 impl TLSPlaintext {
-    pub fn new(content: ContentTypeWithContent, version: ProtocolVersion, suite: Option<&CipherConfig>) -> Result<Self> {
+    pub fn new(
+        content: ContentTypeWithContent,
+        version: ProtocolVersion,
+        suite: Option<&CipherConfig>,
+    ) -> Result<Self> {
         let content_type = (&content).into();
 
         let mut bytes: Vec<u8> = Vec::new();
@@ -70,8 +74,9 @@ impl TLSPlaintext {
             ContentTypeWithContent::ApplicationData(mut b) => bytes.append(&mut b),
         };
 
-        let fragment: VariableLengthVec<u8, 0, 16384> = bytes.into();
-        (&fragment).check_bounds()?;
+        let fragment: VariableLengthVec<u8, 0, 16384> = bytes.try_into().map_err(
+            |_| Alert::illegal_parameter(), // out of range
+        )?;
 
         Ok(Self {
             content_type,
@@ -148,7 +153,7 @@ impl TLSPlaintext {
     /// This function does the opposite of `TLSCompressed.decompress()`.
     pub fn compress(self, con_state: &ConnectionState) -> Result<TLSCompressed> {
         let compression = con_state.parameters.compression_algorithm()?;
-        
+
         let fragment = compression.compress(self.fragment)?;
 
         Ok(TLSCompressed {

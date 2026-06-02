@@ -115,8 +115,9 @@ macro_rules! impl_tls_aes_gcm {
                     .decrypt(&cipher_bytes, Some(&aad), auth_tag, &GCM::new(nonce))
                     .map_err(|_| Alert::bad_record_mac())?;
 
-                let fragment_bytes: VariableLengthVec<u8, 0, 17408> = result.into();
-                fragment_bytes.check_bounds()?;
+                let fragment_bytes: VariableLengthVec<u8, 0, 17408> = result
+                    .try_into()
+                    .map_err(|_| Alert::illegal_parameter())?;
 
                 Ok(TLSCompressed {
                     content_type: ciphertext.content_type,

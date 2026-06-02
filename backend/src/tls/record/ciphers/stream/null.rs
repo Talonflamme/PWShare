@@ -68,9 +68,11 @@ impl TLSCipher for TLSNullCipher {
 
         let generic_stream_cipher = self.decrypt_struct(frag, con_state)?;
         let mac = generic_stream_cipher.mac.clone();
-        let fragment: VariableLengthVec<u8, 0, 17408> = generic_stream_cipher.to_bytes().into();
 
-        fragment.check_bounds()?;
+        let fragment: VariableLengthVec<u8, 0, 17408> = generic_stream_cipher
+            .to_bytes()
+            .try_into()
+            .map_err(|_| Alert::illegal_parameter())?;
 
         let compressed: TLSCompressed = TLSCompressed {
             content_type: ciphertext.content_type,

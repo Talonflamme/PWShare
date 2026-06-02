@@ -16,7 +16,7 @@ pub enum ExtensionType {
 
 impl ExtensionType {
     pub fn new_renegotiation_info(rie: RenegotiationInfoExtension) -> Self {
-        ExtensionType::RenegotiationInfo(vec![rie].into())
+        ExtensionType::RenegotiationInfo(vec![rie].try_into().unwrap())
     }
 }
 

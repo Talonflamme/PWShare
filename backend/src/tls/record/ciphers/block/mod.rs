@@ -101,8 +101,10 @@ pub(super) fn block_decrypt(
 
     let mac = inner.mac;
 
-    let fragment_bytes: VariableLengthVec<u8, 0, 17408> = inner.content.into();
-    fragment_bytes.check_bounds()?;
+    let fragment_bytes: VariableLengthVec<u8, 0, 17408> = inner
+        .content
+        .try_into()
+        .map_err(|_| Alert::illegal_parameter())?;
 
     let tls_compressed = TLSCompressed {
         content_type: ciphertext.content_type,

@@ -120,9 +120,15 @@ where
     }
 }
 
-impl<T, const MIN: usize, const MAX: usize> From<Vec<T>> for VariableLengthVec<T, MIN, MAX> {
-    fn from(value: Vec<T>) -> Self {
-        Self(value)
+impl<T, const MIN: usize, const MAX: usize> TryFrom<Vec<T>> for VariableLengthVec<T, MIN, MAX> {
+    type Error = ();
+
+    fn try_from(vec: Vec<T>) -> core::result::Result<Self, Self::Error> {
+        if vec.len() < MIN || vec.len() > MAX {
+            Err(())
+        } else {
+            Ok(Self(vec))
+        }
     }
 }
 
@@ -135,14 +141,6 @@ impl<T, const MAX: usize> VariableLengthVec<T, 0, MAX> {
 }
 
 impl<const MIN: usize, const MAX: usize> VariableLengthVec<u8, MIN, MAX> {
-    pub fn check_bounds(&self) -> Result<()> {
-        if self.len() < MIN || self.len() > MAX {
-            Err(Alert::illegal_parameter()) // out of range
-        } else {
-            Ok(())
-        }
-    }
-
     pub fn try_into<const NEW_MIN: usize, const NEW_MAX: usize>(
         self,
     ) -> std::result::Result<VariableLengthVec<u8, NEW_MIN, NEW_MAX>, ()> {
@@ -150,14 +148,6 @@ impl<const MIN: usize, const MAX: usize> VariableLengthVec<u8, MIN, MAX> {
             Err(())
         } else {
             Ok(VariableLengthVec(self.0))
-        }
-    }
-
-    pub fn try_from(vec: Vec<u8>) -> std::result::Result<Self, ()> {
-        if vec.len() < MIN || vec.len() > MAX {
-            Err(())
-        } else {
-            Ok(Self(vec))
         }
     }
 }

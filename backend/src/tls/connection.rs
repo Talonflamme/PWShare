@@ -15,17 +15,17 @@ use crate::tls::record::hello::extensions::{Extension, ExtensionType, Renegotiat
 use crate::tls::record::hello::{extensions, ClientHello, ServerHello, ServerHelloDone, SessionID};
 use crate::tls::record::key_exchange::client_key_exchange::{ClientKeyExchange, ExchangeKeys};
 use crate::tls::record::key_exchange::ecdhe::elliptic_curve::{NamedCurve, ServerECDHParams};
+use crate::tls::record::key_exchange::pre_master_secret::PreMasterSecret;
 use crate::tls::record::key_exchange::server_key_exchange::ServerKeyExchangeEcDiffieHellman;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::{Finished, Handshake, HandshakeType, Random, ServerKeyExchange};
 use crate::tls::tls_main::IOErrorOrTLSError;
 use crate::tls::WritableToSink;
+use crate::util::UintDisplay;
 use once_cell::sync::Lazy;
 use std::fs;
 use std::io::{Error, ErrorKind, Write};
 use std::net::TcpStream;
-use crate::tls::record::key_exchange::pre_master_secret::PreMasterSecret;
-use crate::util::UintDisplay;
 
 pub static RSA_KEY: Lazy<Result<RSAPrivateKey>> = Lazy::new(|| {
     let key_content = fs::read_to_string("key.pem")
@@ -190,7 +190,7 @@ impl Connection {
 
         extensions.push(Extension {
             extension_type: ExtensionType::new_renegotiation_info(RenegotiationInfoExtension {
-                renegotiated_connection: Vec::new().into(),
+                renegotiated_connection: Vec::new().try_into().unwrap(),
             }),
         });
 
@@ -200,7 +200,7 @@ impl Connection {
             cipher_suite,
             session_id: SessionID::new_empty(), // we do not store connections, so this is empty
             compression_method: CompressionMethod::Null, // no compression
-            extensions: extensions.into(),
+            extensions: extensions.try_into().unwrap(),
         };
 
         self.connection_states
@@ -223,7 +223,7 @@ impl Connection {
         })?;
 
         let certificate = Certificate {
-            certificate_list: vec![asn1cert].into(),
+            certificate_list: vec![asn1cert].try_into().unwrap(),
         };
 
         let handshake = Handshake::new(HandshakeType::Certificate(certificate));
@@ -401,10 +401,7 @@ impl Connection {
                         )
                     })?;
 
-                    let res = exchange_keys.compute_pre_master(
-                        &private_key,
-                        curve,
-                    );
+                    let res = exchange_keys.compute_pre_master(&private_key, curve);
                     res
                 } else {
                     Err(Alert::internal_error(format!(

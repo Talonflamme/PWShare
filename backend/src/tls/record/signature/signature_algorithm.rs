@@ -26,7 +26,9 @@ impl SignatureAlgorithm {
         match &sig_and_hash.signature {
             SignatureAlgorithm::Anonymous => Ok(Signature::Anonymous()),
             SignatureAlgorithm::RSA => Ok(Signature::RSA(DigitallySigned {
-                signature: rsa::sign(RSA_KEY.as_ref()?, message, &sig_and_hash.hash)?.into(),
+                signature: rsa::sign(RSA_KEY.as_ref()?, message, &sig_and_hash.hash)?
+                    .try_into()
+                    .unwrap(),
                 algorithm: sig_and_hash,
             })),
             SignatureAlgorithm::DSA => {

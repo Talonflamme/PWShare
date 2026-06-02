@@ -25,7 +25,7 @@ impl ASN1Cert {
         let bytes = base64decode(base64content);
 
         Ok(ASN1Cert {
-            bytes: bytes.into(),
+            bytes: bytes.try_into().unwrap(),
         })
     }
 }

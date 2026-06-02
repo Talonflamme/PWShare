@@ -43,7 +43,7 @@ impl ECPoint {
                     y: point.y,
                 }
                 .write(&mut vec, &curve)?;
-                Ok(Self { point: vec.into() })
+                Ok(Self { point: vec.try_into().unwrap() })
             }
             // Montgomery Curves only encode the X coordinate (sometimes 'u') because only it is
             // used as a public key (since Montgomery ladder only requires the x)
@@ -52,7 +52,7 @@ impl ECPoint {
             // Encoding is in little-endian
             NamedCurve::X25519 | NamedCurve::X448 => Ok(Self {
                 point: Self::encode_x_coordinate(point.x, curve)?
-                    .try_into() // TODO: does this work here?
+                    .try_into()
                     .unwrap(),
             }),
             NamedCurve::Unknown => Err(Alert::internal_error("Unknown curve")),
@@ -139,10 +139,8 @@ impl ECPoint {
                     Ok(())
                 }
             }
-            NamedCurve::X25519 | NamedCurve::X448 => {
-                Ok(())
-            }
-            NamedCurve::Unknown => Err(Alert::internal_error("Unknown curve"))
+            NamedCurve::X25519 | NamedCurve::X448 => Ok(()),
+            NamedCurve::Unknown => Err(Alert::internal_error("Unknown curve")),
         }
     }
 }
