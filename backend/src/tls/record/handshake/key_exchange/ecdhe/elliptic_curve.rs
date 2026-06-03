@@ -93,7 +93,7 @@ impl ECPoint {
     }
 
     /// Encodes the x coordinate of a point depending on which curve is used.
-    /// For Weirstrass curves, this happens to be big-endian.
+    /// For Weierstrass curves, this happens to be big-endian.
     /// For Montgomery curves, this happens to be little-endian.
     pub fn encode_x_coordinate(x: BigUint, curve: NamedCurve) -> Result<Vec<u8>> {
         let size = curve.curve()?.coordinate_length;
@@ -111,10 +111,10 @@ impl ECPoint {
         Ok(result)
     }
 
-    /// When `named_curve` is a Weirstrass curve, checks if the given points sits on the curve.
+    /// When `named_curve` is a Weierstrass curve, checks if the given points sits on the curve.
     /// Throws an error if it does not, else returns a simple `Ok(())`.
-    /// If `named_curve` is not a Weirstrass curve, checks nothing and simply returns `Ok(())`
-    pub fn verify_weirstrass(point: Point, named_curve: NamedCurve) -> Result<()> {
+    /// If `named_curve` is not a Weierstrass curve, checks nothing and simply returns `Ok(())`
+    pub fn verify_weierstrass(point: Point, named_curve: NamedCurve) -> Result<()> {
         match named_curve {
             NamedCurve::SECP256R1 | NamedCurve::SECP384R1 | NamedCurve::SECP521R1 => {
                 let curve = named_curve.curve()?;

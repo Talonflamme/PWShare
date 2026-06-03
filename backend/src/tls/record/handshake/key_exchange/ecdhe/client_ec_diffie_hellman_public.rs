@@ -22,7 +22,7 @@ impl ClientECDiffieHellmanPublic {
         // x_peer = X25519(d_client, G) with d_client being the private key of the client
         let x_peer = self.ecdh_yc.to_point(named_curve)?;
 
-        ECPoint::verify_weirstrass(x_peer.clone(), named_curve)?;
+        ECPoint::verify_weierstrass(x_peer.clone(), named_curve)?;
 
         // x_S = X25519(d_server, x_peer) with d_server being the private key of the server
         let shared_secret = curve.scalar_multiply(&private_key.key, x_peer);
