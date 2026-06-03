@@ -208,9 +208,103 @@ pub enum NamedCurve {
 impl NamedCurve {
     pub fn curve(self) -> Result<EllipticCurve> {
         match self {
-            NamedCurve::SECP384R1 => todo!(),
-            NamedCurve::SECP521R1 => todo!(),
-            NamedCurve::SECP256R1 => todo!(),
+            NamedCurve::SECP256R1 => Ok(EllipticCurve {
+                coordinate_length: 32,
+                p: BigUint::new(vec![
+                    0xffffffff, 0xffffffff, 0xffffffff, 0x0, 0x0, 0x0, 0x1, 0xffffffff,
+                ]),
+                constants: EllipticCurveConstants::Weierstrass {
+                    a: BigUint::new(vec![
+                        0xfffffffc, 0xffffffff, 0xffffffff, 0x0, 0x0, 0x0, 0x1, 0xffffffff,
+                    ]),
+                    b: BigUint::new(vec![
+                        0x27d2604b, 0x3bce3c3e, 0xcc53b0f6, 0x651d06b0, 0x769886bc, 0xb3ebbd55,
+                        0xaa3a93e7, 0x5ac635d8,
+                    ]),
+                },
+                G: Point {
+                    x: BigUint::new(vec![
+                        0xd898c296, 0xf4a13945, 0x2deb33a0, 0x77037d81, 0x63a440f2, 0xf8bce6e5,
+                        0xe12c4247, 0x6b17d1f2,
+                    ]),
+                    y: BigUint::new(vec![
+                        0x37bf51f5, 0xcbb64068, 0x6b315ece, 0x2bce3357, 0x7c0f9e16, 0x8ee7eb4a,
+                        0xfe1a7f9b, 0x4fe342e2,
+                    ]),
+                },
+                n: BigUint::new(vec![
+                    0xfc632551, 0xf3b9cac2, 0xa7179e84, 0xbce6faad, 0xffffffff, 0xffffffff, 0x0,
+                    0xffffffff,
+                ]),
+            }),
+            NamedCurve::SECP384R1 => Ok(EllipticCurve {
+                coordinate_length: 48,
+                p: BigUint::new(vec![
+                    0xffffffff, 0x0, 0x0, 0xffffffff, 0xfffffffe, 0xffffffff, 0xffffffff,
+                    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                ]),
+                constants: EllipticCurveConstants::Weierstrass {
+                    a: BigUint::new(vec![
+                        0xfffffffc, 0x0, 0x0, 0xffffffff, 0xfffffffe, 0xffffffff, 0xffffffff,
+                        0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                    ]),
+                    b: BigUint::new(vec![
+                        0xd3ec2aef, 0x2a85c8ed, 0x8a2ed19d, 0xc656398d, 0x5013875a, 0x314088f,
+                        0xfe814112, 0x181d9c6e, 0xe3f82d19, 0x988e056b, 0xe23ee7e4, 0xb3312fa7,
+                    ]),
+                },
+                G: Point {
+                    x: BigUint::new(vec![
+                        0x72760ab7, 0x3a545e38, 0xbf55296c, 0x5502f25d, 0x82542a38, 0x59f741e0,
+                        0x8ba79b98, 0x6e1d3b62, 0xf320ad74, 0x8eb1c71e, 0xbe8b0537, 0xaa87ca22,
+                    ]),
+                    y: BigUint::new(vec![
+                        0x90ea0e5f, 0x7a431d7c, 0x1d7e819d, 0xa60b1ce, 0xb5f0b8c0, 0xe9da3113,
+                        0x289a147c, 0xf8f41dbd, 0x9292dc29, 0x5d9e98bf, 0x96262c6f, 0x3617de4a,
+                    ]),
+                },
+                n: BigUint::new(vec![
+                    0xccc52973, 0xecec196a, 0x48b0a77a, 0x581a0db2, 0xf4372ddf, 0xc7634d81,
+                    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                ]),
+            }),
+            NamedCurve::SECP521R1 => Ok(EllipticCurve {
+                coordinate_length: 66,
+                p: BigUint::new(vec![
+                    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0x1ff,
+                ]),
+                constants: EllipticCurveConstants::Weierstrass {
+                    a: BigUint::new(vec![
+                        0xfffffffc, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                        0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                        0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0x1ff,
+                    ]),
+                    b: BigUint::new(vec![
+                        0x6b503f00, 0xef451fd4, 0x3d2c34f1, 0x3573df88, 0x3bb1bf07, 0x1652c0bd,
+                        0xec7e937b, 0x56193951, 0x8ef109e1, 0xb8b48991, 0x99b315f3, 0xa2da725b,
+                        0xb68540ee, 0x929a21a0, 0x8e1c9a1f, 0x953eb961, 0x51,
+                    ]),
+                },
+                G: Point {
+                    x: BigUint::new(vec![
+                        0xc2e5bd66, 0xf97e7e31, 0x856a429b, 0x3348b3c1, 0xa2ffa8de, 0xfe1dc127,
+                        0xefe75928, 0xa14b5e77, 0x6b4d3dba, 0xf828af60, 0x53fb521, 0x9c648139,
+                        0x2395b442, 0x9e3ecb66, 0x404e9cd, 0x858e06b7, 0xc6,
+                    ]),
+                    y: BigUint::new(vec![
+                        0x9fd16650, 0x88be9476, 0xa272c240, 0x353c7086, 0x3fad0761, 0xc550b901,
+                        0x5ef42640, 0x97ee7299, 0x273e662c, 0x17afbd17, 0x579b4468, 0x98f54449,
+                        0x2c7d1bd9, 0x5c8a5fb4, 0x9a3bc004, 0x39296a78, 0x118,
+                    ]),
+                },
+                n: BigUint::new(vec![
+                    0x91386409, 0xbb6fb71e, 0x899c47ae, 0x3bb5c9b8, 0xf709a5d0, 0x7fcc0148,
+                    0xbf2f966b, 0x51868783, 0xfffffffa, 0xffffffff, 0xffffffff, 0xffffffff,
+                    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0x1ff,
+                ]),
+            }),
             NamedCurve::X25519 => Ok(EllipticCurve {
                 coordinate_length: 32, // 32 bytes
                 p: BigUint::new(vec![

@@ -1,7 +1,6 @@
 use crate::tls::connection::Connection;
 use crate::tls::record::ciphers::cipher_suite::{CipherSuite, SUPPORTED_CIPHER_SUITES};
 use pwshare_macros::generate_cipher_suite_tests;
-use std::ffi::OsStr;
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::process::Command;
