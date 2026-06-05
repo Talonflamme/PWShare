@@ -77,3 +77,44 @@ fn test_x25519_scalar_multiply() {
 
     assert_eq!(output, expected_output);
 }
+
+#[test]
+fn test_secp256r1_scalar_multiply() {
+    let curve = NamedCurve::SECP256R1.curve().unwrap();
+
+    let scalar = BigUint::from_str_radix(
+        "a0bf9fce83ee15eba6b984cb12530c4e57d7642d65bca02b92d6d1fa097552b",
+        16,
+    )
+    .unwrap();
+
+    let point = Point {
+        x: BigUint::from_str_radix(
+            "3c765b26361b7d686f0ea44edc283a6ab54d874ad64c67c312e4bd48db737392",
+            16,
+        )
+        .unwrap(),
+        y: BigUint::from_str_radix(
+            "c42a4820da897f66821880301719725ec507e2b746505820263ac8c6a4847476",
+            16,
+        )
+        .unwrap(),
+    };
+
+    let output = curve.scalar_multiply(&scalar, point);
+
+    let expected_output = Point {
+        x: BigUint::from_str_radix(
+            "291ccd6c75909645e336aa17cb9533a55bcf5f1185dd5c33c4eee1681774cb35",
+            16,
+        )
+        .unwrap(),
+        y: BigUint::from_str_radix(
+            "377c86bbe300a2378143da3267fa3f30c150b4ab4d6bf1564a6f5c2fc0f7796e",
+            16,
+        )
+        .unwrap(),
+    };
+
+    assert_eq!(output, expected_output);
+}
