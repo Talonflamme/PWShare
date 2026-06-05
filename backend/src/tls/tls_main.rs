@@ -67,7 +67,7 @@ fn handle_client(stream: TcpStream) -> Result<(), IOErrorOrTLSError> {
 
 fn handle_client_and_error(stream: TcpStream) {
     match handle_client(stream) {
-        Err(e) => eprintln!("Error handling client: {:?}", e),
+        Err(_) => eprintln!("Handling client failed"),
         Ok(()) => {}
     }
 }

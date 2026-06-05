@@ -421,7 +421,7 @@ impl Connection {
             .convert_to_master(prf_func, &self.connection_states.pending_parameters))
     }
 
-    pub fn start_handshake(&mut self) -> std::result::Result<(), IOErrorOrTLSError> {
+    pub fn start_handshake(&mut self) -> Result<(), IOErrorOrTLSError> {
         if self.is_closed {
             return connection_closed_already!();
         }
@@ -466,7 +466,7 @@ impl Connection {
     }
 
     /// Sends an alert to the connection, returning any Errors.
-    pub fn send_alert(&mut self, alert: Alert) -> std::result::Result<(), IOErrorOrTLSError> {
+    pub fn send_alert(&mut self, alert: Alert) -> Result<(), IOErrorOrTLSError> {
         if self.is_closed {
             return connection_closed_already!();
         }
@@ -483,7 +483,7 @@ impl Connection {
     }
 
     /// Sends application data to the client. Fails if the session is not yet initialized.
-    pub fn send_app_data(&mut self, data: Vec<u8>) -> std::result::Result<(), IOErrorOrTLSError> {
+    pub fn send_app_data(&mut self, data: Vec<u8>) -> Result<(), IOErrorOrTLSError> {
         if self.is_closed {
             return connection_closed_already!();
         }
@@ -497,7 +497,7 @@ impl Connection {
         Ok(())
     }
 
-    pub fn receive_app_data(&mut self) -> std::result::Result<Vec<u8>, IOErrorOrTLSError> {
+    pub fn receive_app_data(&mut self) -> Result<Vec<u8>, IOErrorOrTLSError> {
         if self.is_closed {
             return connection_closed_already!();
         }
