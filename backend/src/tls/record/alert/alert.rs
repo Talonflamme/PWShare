@@ -163,12 +163,18 @@ impl Alert {
         }
     }
 
-    // TODO: add caller and line here
     #[inline]
+    #[track_caller]
     pub fn internal_error<S: Into<String>>(err: S) -> Self {
+        let msg: String = if cfg!(debug_assertions) {
+            let location = std::panic::Location::caller();
+            format!("{} ({})", err.into(), location)
+        } else {
+            err.into()
+        };
         Self {
             level: AlertLevel::Fatal,
-            description: AlertDescription::InternalError(err.into()),
+            description: AlertDescription::InternalError(msg),
         }
     }
 
