@@ -56,6 +56,7 @@ impl WritableToSink for u8 {
 impl_writable_to_sink_uint!(u16);
 impl_writable_to_sink_uint!(u32);
 impl_writable_to_sink_uint!(u64);
+impl_writable_to_sink_uint!(u128);
 
 impl<T, const N: usize> WritableToSink for [T; N]
 where

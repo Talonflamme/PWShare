@@ -2,13 +2,13 @@ use crate::tls::connection::Connection;
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::connection_state::security_parameters;
 use crate::tls::record::alert::{Alert, AlertResult};
+use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::record::cryptographic_attributes::{AeadCiphered, BlockCiphered, StreamCiphered};
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::fragmentation::tls_plaintext::ContentType;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use std::io::Read;
-use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 
 pub(crate) struct GenericStreamCipher {
     pub content: Vec<u8>,
@@ -106,9 +106,10 @@ impl GenericAEADCipher {
 }
 
 impl WritableToSink for GenericAEADCipher {
-    fn write(&self, buffer: &mut impl Sink<u8>, _: Option<&CipherConfig>) -> AlertResult<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> AlertResult<()> {
         buffer.extend_from_slice(&self.nonce_explicit);
         buffer.extend_from_slice(&self.content.bytes);
+        self.auth_tag.write(buffer, suite)?;
         Ok(())
     }
 }
@@ -136,13 +137,16 @@ impl WritableToSink for CipherType {
 pub struct TLSCiphertext {
     pub(crate) content_type: ContentType,
     pub(crate) version: ProtocolVersion,
-    pub(crate) length: u16, 
+    pub(crate) length: u16,
     pub(crate) fragment: CipherType,
 }
 
 /// Encrypts the given `TLSCompressed` to a `TLSCiphertext` using the cipher
 /// specified in `con_state`. Also computes the `MAC` - if specified.
-pub fn encrypt(compressed: TLSCompressed, con_state: &ConnectionState) -> AlertResult<TLSCiphertext> {
+pub fn encrypt(
+    compressed: TLSCompressed,
+    con_state: &ConnectionState,
+) -> AlertResult<TLSCiphertext> {
     con_state.cipher.encrypt(compressed, con_state)
 }
 
@@ -150,8 +154,7 @@ impl TLSCiphertext {
     pub fn read_from_connection(con: &mut Connection) -> AlertResult<Self> {
         // Header contains 5 bytes
         let mut header_buf = [0u8; 5];
-        con
-            .stream
+        con.stream
             .read_exact(&mut header_buf)
             .map_err(|e| Alert::internal_error(format!("Failed reading bytes: {}", e)))?;
 
@@ -167,8 +170,7 @@ impl TLSCiphertext {
         }
 
         let mut fragment_buf = vec![0; length as usize];
-        con
-            .stream
+        con.stream
             .read_exact(fragment_buf.as_mut_slice())
             .map_err(|e| Alert::internal_error(format!("Failed reading bytes: {}", e)))?;
 

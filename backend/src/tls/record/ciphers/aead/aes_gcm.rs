@@ -27,6 +27,11 @@ macro_rules! get_aad {
     }};
 }
 
+/// The number of bytes added to the plaintext when encrypting with AES-GCM.
+/// AES-GCM adds an 8-byte explicit nonce (written into the record) and a
+/// 16-byte authentication tag, for a total overhead of 24 bytes.
+const GCM_OVERHEAD: usize = 24;
+
 macro_rules! impl_tls_aes_gcm {
     ($typ:ident, $key:ident) => {
         #[derive(Debug)]
@@ -72,7 +77,9 @@ macro_rules! impl_tls_aes_gcm {
                     self.cipher
                         .encrypt(&plain_bytes, Some(&aad), &GCM::new(nonce));
 
-                let length = (ciphertext.len() + nonce_explicit.len() + 16) as u16; // 16 = len(auth_tag)
+                assert_eq!(GCM_OVERHEAD, nonce_explicit.len() + 16, "GCM Overhead should equal nonce_explicit_length ({}) + 16", nonce_explicit.len());
+
+                let length = (ciphertext.len() + GCM_OVERHEAD) as u16; // 16 = len(auth_tag)
 
                 let gac = GenericAEADCipher {
                     nonce_explicit: nonce_explicit.to_vec(),
@@ -93,9 +100,7 @@ macro_rules! impl_tls_aes_gcm {
                 ciphertext: TLSCiphertext,
                 con_state: &ConnectionState,
             ) -> AlertResult<TLSCompressed> {
-                let fragment = if let CipherType::Aead(a) = ciphertext.fragment {
-                    a
-                } else {
+                let CipherType::Aead(fragment) = ciphertext.fragment else {
                     return Err(Alert::internal_error(
                         "TLSAeadCipher.decrypt called on something other than GenericAeadCipher",
                     ));
@@ -105,7 +110,7 @@ macro_rules! impl_tls_aes_gcm {
                 nonce[..4].copy_from_slice(&con_state.write_iv); // salt
                 nonce[4..].copy_from_slice(&fragment.nonce_explicit);
 
-                let aad = get_aad!(ciphertext, con_state, ciphertext.length); // TODO: uses wrong .length
+                let aad = get_aad!(ciphertext, con_state, ciphertext.length - GCM_OVERHEAD as u16);
 
                 let cipher_bytes = fragment.content.bytes;
                 let auth_tag = fragment.auth_tag;
