@@ -4,7 +4,6 @@ use crate::cryptography::pkcs1_v1_5;
 use crate::cryptography::pkcs1_v1_5::PKCS1v1_5Mode;
 use crate::cryptography::rsa::RSAPrivateKey;
 use crate::tls::record::alert::{Alert, AlertResult};
-use crate::util::UintDisplay;
 use num_bigint::BigUint;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 

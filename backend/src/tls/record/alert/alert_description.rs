@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use crate::tls::record::alert::Alert;
 use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
@@ -100,7 +102,6 @@ pub enum AlertDescription {
 }
 
 impl From<u8> for AlertDescription {
-    #[allow(deprecated)]
     fn from(value: u8) -> Self {
         match value {
             0 => Self::CloseNotify,

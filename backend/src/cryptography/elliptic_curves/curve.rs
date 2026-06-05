@@ -169,8 +169,8 @@ impl EllipticCurve {
             z_2 = E.mulm(&AA.addm(&a24.mulm(&E, p), p), p);
         }
 
-        (x_2, x_3) = cswap!(swap, x_2, x_3);
-        (z_2, z_3) = cswap!(swap, z_2, z_3);
+        (x_2, _) = cswap!(swap, x_2, x_3);
+        (z_2, _) = cswap!(swap, z_2, z_3);
 
         x_2.mulm(&z_2.modpow(&(p - two), p), p)
     }

@@ -70,7 +70,7 @@ macro_rules! impl_aes_key {
 
         impl Display for $name {
             fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-                write!(f, "0x");
+                write!(f, "0x")?;
                 for u in self.key {
                     write!(f, "{:08x}", u)?;
                 }
