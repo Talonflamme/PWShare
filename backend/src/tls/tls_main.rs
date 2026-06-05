@@ -41,18 +41,10 @@ fn handle_client(stream: TcpStream) -> Result<(), IOErrorOrTLSError> {
     let mut connection = Connection::new(stream);
 
     if let Err(err) = connection.start_handshake() {
-        match &err {
-            IOErrorOrTLSError::TLSErrorReceived(alert) => {
-                eprintln!("RECEIVED Alert: {:?}", alert);
-            }
-            IOErrorOrTLSError::TLSErrorSent(alert) => {
-                eprintln!("SENT Alert: {:?}", alert);
-                connection.send_alert(alert.clone())?
-            }
-            IOErrorOrTLSError::IOError(io_err) => eprintln!("IO Error: {}", io_err),
-        }
-
         // stream is closed when 'connection.stream' is dropped, so after this
+        if let IOErrorOrTLSError::TLSErrorSent(alert) = &err {
+            connection.send_alert(alert.clone())?
+        }
         return Err(err);
     }
 
@@ -67,7 +59,17 @@ fn handle_client(stream: TcpStream) -> Result<(), IOErrorOrTLSError> {
 
 fn handle_client_and_error(stream: TcpStream) {
     match handle_client(stream) {
-        Err(_) => eprintln!("Handling client failed"),
+        Err(e) => match e {
+            IOErrorOrTLSError::TLSErrorReceived(alert) => {
+                eprintln!("RECEIVED Alert: {:?}", alert);
+            }
+            IOErrorOrTLSError::TLSErrorSent(alert) => {
+                eprintln!("SENT Alert: {:?}", alert);
+            }
+            IOErrorOrTLSError::IOError(io_err) => {
+                eprintln!("IO Error: {}", io_err);
+            }
+        },
         Ok(()) => {}
     }
 }
