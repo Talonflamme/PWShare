@@ -3,7 +3,7 @@ use crate::cryptography::block_cipher::AESCipher;
 use crate::cryptography::hashing::copy_chunk_into_words_be;
 use crate::cryptography::mode_of_operation::cbc::CBC;
 use crate::tls::connection_state::connection_state::ConnectionState;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::ciphers::block::{
     block_decrypt, block_encrypt, DecryptStructResult, TLSBlockCipher,
 };
@@ -21,7 +21,7 @@ macro_rules! impl_tls_aes_cbc {
         }
 
         impl $typ {
-            pub fn new(key: Vec<u8>) -> Result<Self> {
+            pub fn new(key: Vec<u8>) -> AlertResult<Self> {
                 if key.len() != $key::BYTES {
                     // unknown key length, should not occur since those ciphers are not selected
                     return Err(Alert::internal_error(format!(
@@ -38,7 +38,7 @@ macro_rules! impl_tls_aes_cbc {
         }
 
         impl TLSBlockCipher for $typ {
-            fn encrypt_struct(&self, fragment: GenericBlockCipherInner, iv: &[u8]) -> Result<BlockCiphered<GenericBlockCipherInner>> {
+            fn encrypt_struct(&self, fragment: GenericBlockCipherInner, iv: &[u8]) -> AlertResult<BlockCiphered<GenericBlockCipherInner>> {
                 let bytes = fragment.to_bytes();
 
                 if bytes.len() % 16 != 0 {
@@ -67,7 +67,7 @@ macro_rules! impl_tls_aes_cbc {
                 Ok(BlockCiphered::new(bytes))
             }
 
-            fn decrypt_struct(&self, fragment: BlockCiphered<GenericBlockCipherInner>, con_state: &ConnectionState, iv: &[u8]) -> Result<DecryptStructResult> {
+            fn decrypt_struct(&self, fragment: BlockCiphered<GenericBlockCipherInner>, con_state: &ConnectionState, iv: &[u8]) -> AlertResult<DecryptStructResult> {
                 let bytes = fragment.bytes;
                 let mac_length = *con_state.parameters.mac_length()? as usize;
 
@@ -137,11 +137,11 @@ macro_rules! impl_tls_aes_cbc {
         }
 
         impl TLSCipher for $typ {
-            fn encrypt(&self, plaintext: TLSCompressed, con_state: &ConnectionState) -> Result<TLSCiphertext> {
+            fn encrypt(&self, plaintext: TLSCompressed, con_state: &ConnectionState) -> AlertResult<TLSCiphertext> {
                 block_encrypt(self, plaintext, con_state)
             }
 
-            fn decrypt(&self, ciphertext: TLSCiphertext, con_state: &ConnectionState) -> Result<TLSCompressed> {
+            fn decrypt(&self, ciphertext: TLSCiphertext, con_state: &ConnectionState) -> AlertResult<TLSCompressed> {
                 block_decrypt(self, ciphertext, con_state)
             }
         }

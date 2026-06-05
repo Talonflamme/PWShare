@@ -1,6 +1,6 @@
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::connection_state::security_parameters::ConnectionEnd;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::util::UintDisplay;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Formatter};
@@ -30,7 +30,7 @@ impl Finished {
     pub fn calculate_verify_data(
         con_state: &ConnectionState,
         handshake_messages: &[u8],
-    ) -> Result<[u8; VERIFY_DATA_LENGTH]> {
+    ) -> AlertResult<[u8; VERIFY_DATA_LENGTH]> {
         let prf = con_state.parameters.prf_algorithm()?;
         let master_secret = con_state.parameters.master_secret()?;
         let entity = *con_state.parameters.entity()?;
@@ -56,7 +56,7 @@ impl Finished {
 
     /// Computed the `verify_data` field and checks if it matches to `self.verify_data`. If it
     /// does, `Ok(())` is returned. An `Err` is returned otherwise.
-    pub fn verify(&self, con_state: &ConnectionState, handshake_messages: &[u8]) -> Result<()> {
+    pub fn verify(&self, con_state: &ConnectionState, handshake_messages: &[u8]) -> AlertResult<()> {
         let data = Self::calculate_verify_data(con_state, handshake_messages)?;
 
         if self.verify_data == data {

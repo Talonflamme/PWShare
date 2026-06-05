@@ -1,5 +1,5 @@
 use crate::cryptography::elliptic_curves::ECDHPrivateKey;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::key_exchange::ecdhe::elliptic_curve::{ECPoint, NamedCurve};
 use crate::tls::record::key_exchange::pre_master_secret::PreMasterSecret;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
@@ -15,7 +15,7 @@ impl ClientECDiffieHellmanPublic {
         self,
         private_key: &ECDHPrivateKey,
         named_curve: NamedCurve,
-    ) -> Result<PreMasterSecret> {
+    ) -> AlertResult<PreMasterSecret> {
         let curve = named_curve.curve()?;
 
         // For example with X25519:

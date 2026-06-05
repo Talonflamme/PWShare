@@ -2,7 +2,7 @@ pub mod aes_cbc;
 
 use crate::cryptography::rng::rng;
 use crate::tls::connection_state::connection_state::ConnectionState;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::ciphers::cipher::TLSCipher;
 use crate::tls::record::cryptographic_attributes::BlockCiphered;
 use crate::tls::record::fragmentation::tls_ciphertext::{
@@ -18,13 +18,13 @@ pub(super) trait TLSBlockCipher: Debug + TLSCipher {
         &self,
         fragment: GenericBlockCipherInner,
         iv: &[u8],
-    ) -> Result<BlockCiphered<GenericBlockCipherInner>>;
+    ) -> AlertResult<BlockCiphered<GenericBlockCipherInner>>;
     fn decrypt_struct(
         &self,
         fragment: BlockCiphered<GenericBlockCipherInner>,
         con_state: &ConnectionState,
         iv: &[u8],
-    ) -> Result<DecryptStructResult>;
+    ) -> AlertResult<DecryptStructResult>;
 }
 
 /// We use a different struct as this result in order to prevent a timing attack based on
@@ -40,7 +40,7 @@ pub(super) fn block_encrypt(
     cipher: &impl TLSBlockCipher,
     plaintext: TLSCompressed,
     con_state: &ConnectionState,
-) -> Result<TLSCiphertext> {
+) -> AlertResult<TLSCiphertext> {
     let mac = plaintext.generate_mac(con_state)?;
 
     let record_iv_len = *con_state.parameters.record_iv_length()? as usize;
@@ -83,7 +83,7 @@ pub(super) fn block_decrypt(
     cipher: &impl TLSBlockCipher,
     ciphertext: TLSCiphertext,
     con_state: &ConnectionState,
-) -> Result<TLSCompressed> {
+) -> AlertResult<TLSCompressed> {
     let fragment = if let CipherType::Block(gcb) = ciphertext.fragment {
         gcb
     } else {

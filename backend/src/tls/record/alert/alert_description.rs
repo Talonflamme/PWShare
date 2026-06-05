@@ -137,7 +137,7 @@ impl ReadableFromStream for AlertDescription {
     fn read(
         stream: &mut impl Iterator<Item = u8>,
         suite: Option<&CipherConfig>,
-    ) -> crate::tls::record::alert::Result<Self> {
+    ) -> crate::tls::record::alert::AlertResult<Self> {
         let repr = u8::read(stream, suite)?;
         Ok(Self::from(repr))
     }
@@ -148,7 +148,7 @@ impl WritableToSink for AlertDescription {
         &self,
         buffer: &mut impl Sink<u8>,
         suite: Option<&CipherConfig>,
-    ) -> crate::tls::record::alert::Result<()> {
+    ) -> crate::tls::record::alert::AlertResult<()> {
         if matches!(self, Self::Unknown(_)) {
             Err(Alert::internal_error(
                 "Cannot write Unknown AlertDescription",

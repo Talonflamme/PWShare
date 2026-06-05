@@ -1,6 +1,6 @@
 use crate::cryptography::elliptic_curves::curve::{EllipticCurve, EllipticCurveConstants, Point};
 use crate::cryptography::elliptic_curves::ECDHPublicKey;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
 use num_bigint::BigUint;
@@ -29,7 +29,7 @@ pub struct ECPoint {
 }
 
 impl ECPoint {
-    fn from_curve_and_point(point: Point, curve: NamedCurve) -> Result<Self> {
+    fn from_curve_and_point(point: Point, curve: NamedCurve) -> AlertResult<Self> {
         match curve {
             // Weierstrass curves are encoded with the UncompressedPointRepresentation struct
             // the points are implicitly sized based on the curve. The amount of bytes used
@@ -61,7 +61,7 @@ impl ECPoint {
         }
     }
 
-    pub fn to_point(self, curve: NamedCurve) -> Result<Point> {
+    pub fn to_point(self, curve: NamedCurve) -> AlertResult<Point> {
         match curve {
             // Weierstrass curves are encoded with the UncompressedPointRepresentation struct
             // the points are implicitly sized based on the curve. The amount of bytes used
@@ -94,7 +94,7 @@ impl ECPoint {
     /// Encodes the x coordinate of a point depending on which curve is used.
     /// For Weierstrass curves, this happens to be big-endian.
     /// For Montgomery curves, this happens to be little-endian.
-    pub fn encode_x_coordinate(x: BigUint, curve: NamedCurve) -> Result<Vec<u8>> {
+    pub fn encode_x_coordinate(x: BigUint, curve: NamedCurve) -> AlertResult<Vec<u8>> {
         let size = curve.curve()?.coordinate_length;
 
         let mut result = vec![0u8; size];
@@ -113,7 +113,7 @@ impl ECPoint {
     /// When `named_curve` is a Weierstrass curve, checks if the given points sits on the curve.
     /// Throws an error if it does not, else returns a simple `Ok(())`.
     /// If `named_curve` is not a Weierstrass curve, checks nothing and simply returns `Ok(())`
-    pub fn verify_weierstrass(point: Point, named_curve: NamedCurve) -> Result<()> {
+    pub fn verify_weierstrass(point: Point, named_curve: NamedCurve) -> AlertResult<()> {
         match named_curve {
             NamedCurve::SECP256R1 | NamedCurve::SECP384R1 | NamedCurve::SECP521R1 => {
                 let curve = named_curve.curve()?;
@@ -137,7 +137,7 @@ struct UncompressedPointRepresentation {
 }
 
 impl UncompressedPointRepresentation {
-    fn write(&self, buffer: &mut impl Sink<u8>, named_curve: &NamedCurve) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, named_curve: &NamedCurve) -> AlertResult<()> {
         let curve = named_curve.curve()?;
 
         let bytes = curve.p.bits().div_ceil(8) as usize;
@@ -159,7 +159,7 @@ impl UncompressedPointRepresentation {
         Ok(())
     }
 
-    fn read(stream: &mut impl Iterator<Item = u8>, named_curve: &NamedCurve) -> Result<Self> {
+    fn read(stream: &mut impl Iterator<Item = u8>, named_curve: &NamedCurve) -> AlertResult<Self> {
         let curve = named_curve.curve()?;
 
         let bytes = curve.p.bits().div_ceil(8) as usize;
@@ -205,7 +205,7 @@ pub enum NamedCurve {
 }
 
 impl NamedCurve {
-    pub fn curve(self) -> Result<EllipticCurve> {
+    pub fn curve(self) -> AlertResult<EllipticCurve> {
         match self {
             NamedCurve::SECP256R1 => Ok(EllipticCurve {
                 coordinate_length: 32,
@@ -359,7 +359,7 @@ pub struct ServerECDHParams {
 }
 
 impl ServerECDHParams {
-    pub fn from_curve_and_key(named_curve: NamedCurve, public_key: &ECDHPublicKey) -> Result<Self> {
+    pub fn from_curve_and_key(named_curve: NamedCurve, public_key: &ECDHPublicKey) -> AlertResult<Self> {
         Ok(Self {
             curve_params: ECParameters {
                 curve_type: ECCurveType::NamedCurve,

@@ -3,7 +3,7 @@ use crate::cryptography::pem::asn1der::{self, FromASN1DER, ToASN1DER};
 use crate::cryptography::pkcs1_v1_5;
 use crate::cryptography::pkcs1_v1_5::PKCS1v1_5Mode;
 use crate::cryptography::rsa::RSAPrivateKey;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::util::UintDisplay;
 use num_bigint::BigUint;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
@@ -75,7 +75,7 @@ pub fn sign(
     key: &RSAPrivateKey,
     message: &[u8],
     hash_algorithm: &HashAlgorithm,
-) -> Result<Vec<u8>> {
+) -> AlertResult<Vec<u8>> {
     let identifier = hash_algorithm
         .object_identifier()
         .ok_or(Alert::internal_error(format!(

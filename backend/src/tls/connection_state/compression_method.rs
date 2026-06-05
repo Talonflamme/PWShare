@@ -1,4 +1,4 @@
-use crate::tls::record::alert::Result;
+use crate::tls::record::alert::AlertResult;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 
@@ -15,7 +15,7 @@ impl CompressionMethod {
     pub fn compress(
         &self,
         uncompressed: VariableLengthVec<u8, 0, 16384>, // 16384 = 2^14
-    ) -> Result<VariableLengthVec<u8, 0, 17408>> {
+    ) -> AlertResult<VariableLengthVec<u8, 0, 17408>> {
         // 17408 = 2^14 + 1024
         match self {
             CompressionMethod::Null => {
@@ -28,7 +28,7 @@ impl CompressionMethod {
     pub fn decompress(
         &self,
         compressed: VariableLengthVec<u8, 0, 17408>,
-    ) -> Result<VariableLengthVec<u8, 0, 16384>> {
+    ) -> AlertResult<VariableLengthVec<u8, 0, 16384>> {
         match self {
             CompressionMethod::Null => Ok(compressed.try_into().expect("Null.decompress()/compress() should be an identity function and return the exact vector")),
         }

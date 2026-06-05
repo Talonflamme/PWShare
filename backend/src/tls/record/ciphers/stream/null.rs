@@ -15,7 +15,7 @@ impl TLSNullCipher {
     fn encrypt_struct(
         &self,
         fragment: GenericStreamCipher,
-    ) -> crate::tls::record::alert::Result<StreamCiphered<GenericStreamCipher>> {
+    ) -> crate::tls::record::alert::AlertResult<StreamCiphered<GenericStreamCipher>> {
         // no encryption
         Ok(StreamCiphered::new(fragment.to_bytes()))
     }
@@ -24,7 +24,7 @@ impl TLSNullCipher {
         &self,
         fragment: StreamCiphered<GenericStreamCipher>,
         con_state: &ConnectionState,
-    ) -> crate::tls::record::alert::Result<GenericStreamCipher> {
+    ) -> crate::tls::record::alert::AlertResult<GenericStreamCipher> {
         GenericStreamCipher::read(fragment.bytes, con_state)
     }
 }
@@ -34,7 +34,7 @@ impl TLSCipher for TLSNullCipher {
         &self,
         plaintext: TLSCompressed,
         con_state: &ConnectionState,
-    ) -> crate::tls::record::alert::Result<TLSCiphertext> {
+    ) -> crate::tls::record::alert::AlertResult<TLSCiphertext> {
         let mac = plaintext.generate_mac(con_state)?;
 
         let generic_stream_cipher = GenericStreamCipher {
@@ -56,7 +56,7 @@ impl TLSCipher for TLSNullCipher {
         &self,
         ciphertext: TLSCiphertext,
         con_state: &ConnectionState,
-    ) -> crate::tls::record::alert::Result<TLSCompressed> {
+    ) -> crate::tls::record::alert::AlertResult<TLSCompressed> {
         let frag = match ciphertext.fragment {
             CipherType::Stream(s) => s,
             _ => {

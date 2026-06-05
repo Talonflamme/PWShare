@@ -1,4 +1,4 @@
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::record::ciphers::key_exchange_algorithm::KeyExchangeAlgorithm;
 use crate::tls::record::handshake::key_exchange::rsa::EncryptedPreMasterSecret;
@@ -20,7 +20,7 @@ pub enum ExchangeKeys {
 }
 
 impl WritableToSink for ExchangeKeys {
-    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> AlertResult<()> {
         let kx = &suite
             .ok_or_else(|| Alert::internal_error("ExchangeKeys written when suite is null"))?
             .key_exchange;
@@ -48,7 +48,7 @@ impl WritableToSink for ExchangeKeys {
 }
 
 impl ReadableFromStream for ExchangeKeys {
-    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
+    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> AlertResult<Self> {
         match suite.unwrap().key_exchange {
             KeyExchangeAlgorithm::Null => Err(Alert::internal_error(
                 "Cannot read ExchangeKeys when Key Exchange is null",

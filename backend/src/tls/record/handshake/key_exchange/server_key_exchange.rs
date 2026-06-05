@@ -1,5 +1,5 @@
 use super::ecdhe::elliptic_curve::ServerECDHParams;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::record::ciphers::key_exchange_algorithm::KeyExchangeAlgorithm;
 use crate::tls::record::signature::Signature;
@@ -12,7 +12,7 @@ pub enum ServerKeyExchange {
 }
 
 impl ReadableFromStream for ServerKeyExchange {
-    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
+    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> AlertResult<Self> {
         let s = suite.ok_or(Alert::internal_error(
             "Reading Signature when no cipher suite is negotiated",
         ))?;
@@ -28,7 +28,7 @@ impl ReadableFromStream for ServerKeyExchange {
 }
 
 impl WritableToSink for ServerKeyExchange {
-    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> AlertResult<()> {
         match self {
             ServerKeyExchange::EcDiffieHellman(ecdh) => ecdh.write(buffer, suite),
         }

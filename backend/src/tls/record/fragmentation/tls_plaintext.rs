@@ -1,11 +1,12 @@
 use crate::tls::connection_state::connection_state::ConnectionState;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::change_cipher_spec::ChangeCipherSpec;
 use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use crate::tls::record::Handshake;
+use crate::tls::tls_main::IOErrorOrTLSError;
 use crate::tls::{ReadableFromStream, WritableToSink};
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::{Debug, Formatter};
@@ -57,12 +58,28 @@ impl Debug for TLSPlaintext {
     }
 }
 
+// TODO: dislike this, maybe use fn instead
+/// If `self.content_type` is `Alert`, returns an Error with that `Alert` wrapped in an `IOErrorOrTLSError::TLSErrorReceived`
+macro_rules! return_alert {
+    ($self:expr, $suite:expr) => {
+        if matches!($self.content_type, ContentType::Alert) {
+            let mut iter = Into::<Vec<_>>::into($self.fragment).into_iter();
+            let alert = Alert::read(&mut iter, $suite)?;
+            if iter.next().is_some() {
+                return Err(Alert::decode_error().into());
+            } else {
+                return Err(IOErrorOrTLSError::TLSErrorReceived(alert));
+            }
+        }
+    };
+}
+
 impl TLSPlaintext {
     pub fn new(
         content: ContentTypeWithContent,
         version: ProtocolVersion,
         suite: Option<&CipherConfig>,
-    ) -> Result<Self> {
+    ) -> AlertResult<Self> {
         let content_type = (&content).into();
 
         let mut bytes: Vec<u8> = Vec::new();
@@ -86,7 +103,12 @@ impl TLSPlaintext {
         })
     }
 
-    pub fn get_content(self, suite: Option<&CipherConfig>) -> Result<ContentTypeWithContent> {
+    pub fn get_content(
+        self,
+        suite: Option<&CipherConfig>,
+    ) -> Result<ContentTypeWithContent, IOErrorOrTLSError> {
+        return_alert!(self, suite);
+
         let mut iter = Into::<Vec<u8>>::into(self.fragment).into_iter();
 
         Ok(match self.content_type {
@@ -103,9 +125,14 @@ impl TLSPlaintext {
 
     /// Returns a Handshake that parses the bytes of `self.fragment` if `self.content_type`
     /// is Handshake. Returns an `Err` otherwise.
-    pub fn get_handshake(self, suite: Option<&CipherConfig>) -> Result<Handshake> {
+    pub fn get_handshake(
+        self,
+        suite: Option<&CipherConfig>,
+    ) -> Result<Handshake, IOErrorOrTLSError> {
+        return_alert!(self, suite);
+
         if self.content_type != ContentType::Handshake {
-            return Err(Alert::unexpected_message()); // expected handshake, got something other
+            return Err(Alert::unexpected_message().into()); // expected handshake, got something other
         }
 
         let frag: Vec<u8> = self.fragment.into();
@@ -114,7 +141,7 @@ impl TLSPlaintext {
         let handshake = Handshake::read(&mut iter, suite)?;
 
         if iter.next().is_some() {
-            Err(Alert::decode_error()) // too many bytes
+            Err(Alert::decode_error().into()) // too many bytes
         } else {
             Ok(handshake)
         }
@@ -122,9 +149,11 @@ impl TLSPlaintext {
 
     /// Returns a `ChangeCipherSpec` that is parsed from `self.fragment` if `self.content_type`
     /// is `ChangeCipherSpec`. Returns an `Err` otherwise.
-    pub fn get_change_cipher_spec(self) -> Result<ChangeCipherSpec> {
+    pub fn get_change_cipher_spec(self) -> Result<ChangeCipherSpec, IOErrorOrTLSError> {
+        return_alert!(self, None);
+
         if self.content_type != ContentType::ChangeCipherSpec {
-            return Err(Alert::unexpected_message()); // expected ChangeCipherSpec
+            return Err(Alert::unexpected_message().into()); // expected ChangeCipherSpec
         }
 
         let frag: Vec<u8> = self.fragment.into();
@@ -133,7 +162,7 @@ impl TLSPlaintext {
         let ccs = ChangeCipherSpec::read(&mut iter, None)?;
 
         if iter.next().is_some() {
-            Err(Alert::decode_error())
+            Err(Alert::decode_error().into())
         } else {
             Ok(ccs)
         }
@@ -141,9 +170,11 @@ impl TLSPlaintext {
 
     /// Returns the Application Data as a `Vec<u8>` if `self.content_type` is `ApplicationData`.
     /// Returns an `Err` otherwise.
-    pub fn get_application_data(self) -> Result<Vec<u8>> {
+    pub fn get_application_data(self) -> Result<Vec<u8>, IOErrorOrTLSError> {
+        return_alert!(self, None);
+
         if self.content_type != ContentType::ApplicationData {
-            return Err(Alert::unexpected_message()); // expected ApplicationData
+            return Err(Alert::unexpected_message().into()); // expected ApplicationData
         }
 
         Ok(self.fragment.into())
@@ -151,7 +182,7 @@ impl TLSPlaintext {
 
     /// Compresses the Plaintext into a `TLSCompressed` given the connection state.
     /// This function does the opposite of `TLSCompressed.decompress()`.
-    pub fn compress(self, con_state: &ConnectionState) -> Result<TLSCompressed> {
+    pub fn compress(self, con_state: &ConnectionState) -> AlertResult<TLSCompressed> {
         let compression = con_state.parameters.compression_algorithm()?;
 
         let fragment = compression.compress(self.fragment)?;

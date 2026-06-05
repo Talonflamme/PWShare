@@ -3,7 +3,7 @@ use crate::cryptography::block_cipher::AESCipherAead;
 use crate::cryptography::hashing::copy_chunk_into_words_be;
 use crate::cryptography::mode_of_operation::gcm::GCM;
 use crate::tls::connection_state::connection_state::ConnectionState;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::ciphers::cipher::TLSCipher;
 use crate::tls::record::cryptographic_attributes::AeadCiphered;
 use crate::tls::record::fragmentation::tls_ciphertext::{
@@ -35,7 +35,7 @@ macro_rules! impl_tls_aes_gcm {
         }
 
         impl $typ {
-            pub fn new(key: Vec<u8>) -> Result<Self> {
+            pub fn new(key: Vec<u8>) -> AlertResult<Self> {
                 if key.len() != $key::BYTES {
                     return Err(Alert::internal_error(format!(
                         "Unexpected AES GCM key length: {}, expected: {}",
@@ -58,7 +58,7 @@ macro_rules! impl_tls_aes_gcm {
                 &self,
                 plaintext: TLSCompressed,
                 con_state: &ConnectionState,
-            ) -> Result<TLSCiphertext> {
+            ) -> AlertResult<TLSCiphertext> {
                 // nonce consists of `salt` + `nonce_explicit`, with `salt = client_write_IV` (or server)
                 let mut nonce = vec![0u8; 12];
                 nonce[..4].copy_from_slice(&con_state.write_iv);
@@ -92,7 +92,7 @@ macro_rules! impl_tls_aes_gcm {
                 &self,
                 ciphertext: TLSCiphertext,
                 con_state: &ConnectionState,
-            ) -> Result<TLSCompressed> {
+            ) -> AlertResult<TLSCompressed> {
                 let fragment = if let CipherType::Aead(a) = ciphertext.fragment {
                     a
                 } else {

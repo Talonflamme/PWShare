@@ -1,7 +1,7 @@
 use crate::tls::connection_state::mac::MACAlgorithm;
 use crate::tls::connection_state::prf::PRFAlgorithm;
 use crate::tls::connection_state::security_parameters::{BulkCipherAlgorithm, SecurityParameters};
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::ciphers::key_exchange_algorithm::KeyExchangeAlgorithm;
 use crate::tls::record::hello::extensions::{Extension, ExtensionType, NamedCurveList};
 use crate::tls::record::key_exchange::ecdhe::elliptic_curve::NamedCurve;
@@ -62,12 +62,13 @@ pub enum CipherSuite {
     TlsRsaWithAes256GcmSha384 = 0x009d,
 
     TlsEcdheRsaWithAes128CbcSha256 = 0xc027,
+    TlsEcdheRsaWithAes128GcmSha256 = 0xc02f,
 
     Unknown = 0xFFFF,
 }
 
 impl ReadableFromStream for CipherSuite {
-    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
+    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> AlertResult<Self> {
         let u = u16::read(stream, suite)?;
 
         Ok(Self::try_from(u).unwrap_or(Self::Unknown))
@@ -75,7 +76,7 @@ impl ReadableFromStream for CipherSuite {
 }
 
 impl WritableToSink for CipherSuite {
-    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> AlertResult<()> {
         if matches!(self, CipherSuite::Unknown) {
             return Err(Alert::internal_error(
                 "Unknown cipher suite cannot be written",
@@ -104,7 +105,7 @@ pub struct CipherConfig {
 }
 
 impl CipherSuite {
-    pub fn config(&self) -> Result<CipherConfig> {
+    pub fn config(&self) -> AlertResult<CipherConfig> {
         match self {
             CipherSuite::TlsNullWithNullNull => Ok(CipherConfig {
                 key_exchange: KeyExchangeAlgorithm::Null,
@@ -186,11 +187,21 @@ impl CipherSuite {
                 key_length: 16,
                 ec_curve: None,
             }),
+            CipherSuite::TlsEcdheRsaWithAes128GcmSha256 => Ok(CipherConfig {
+                key_exchange: KeyExchangeAlgorithm::Ecdhe,
+                signature: SignatureAlgorithm::RSA,
+                cipher: BulkCipherAlgorithm::Aes128Gcm,
+                mac: MACAlgorithm::HMacSha256,
+                hash: HashAlgorithm::Sha256,
+                prf: PRFAlgorithm::TlsPrfSha256,
+                key_length: 16,
+                ec_curve: None,
+            }),
             _ => Err(Alert::internal_error("Unsupported cipher was negotiated")), // should not occur
         }
     }
 
-    pub fn set_security_params(&self, params: &mut SecurityParameters) -> Result<()> {
+    pub fn set_security_params(&self, params: &mut SecurityParameters) -> AlertResult<()> {
         let config = self.config()?;
 
         params.prf_algorithm = Some(config.prf);
@@ -204,7 +215,8 @@ impl CipherSuite {
 
 /// A list of Cipher Suites, that are supported by this server. They in order of preference
 /// in descending order (most preferable first).
-pub const SUPPORTED_CIPHER_SUITES: [CipherSuite; 7] = [
+pub const SUPPORTED_CIPHER_SUITES: [CipherSuite; 8] = [
+    CipherSuite::TlsEcdheRsaWithAes128GcmSha256,
     CipherSuite::TlsEcdheRsaWithAes128CbcSha256,
     CipherSuite::TlsRsaWithAes256GcmSha384,
     CipherSuite::TlsRsaWithAes128GcmSha256,
@@ -230,7 +242,7 @@ pub const SUPPORTED_EC_CURVES: [NamedCurve; 5] = [
 /// such extension in `extensions`.
 ///
 /// See [RFC 8422](https://datatracker.ietf.org/doc/html/rfc8422#section-5.1.1)
-fn get_client_supported_named_curves(extensions: &[Extension]) -> Result<Option<&NamedCurveList>> {
+fn get_client_supported_named_curves(extensions: &[Extension]) -> AlertResult<Option<&NamedCurveList>> {
     for ex in extensions.iter() {
         if let ExtensionType::SupportedGroups(sg) = &ex.extension_type {
             if sg.len() != 1 {
@@ -248,7 +260,7 @@ fn get_client_supported_named_curves(extensions: &[Extension]) -> Result<Option<
 /// the server (in `SUPPORTED_EC_CURVES`). If no common curve is found, an `Alert::handshake_fail()`
 /// is returned. If no `Supported Groups Extension` is sent by the client, the most preferable
 /// curve of this server is returned (usually `X25519`).
-pub fn select_ec_curve(client_extensions: &[Extension]) -> Result<NamedCurve> {
+pub fn select_ec_curve(client_extensions: &[Extension]) -> AlertResult<NamedCurve> {
     let curves = get_client_supported_named_curves(client_extensions)?;
 
     if let Some(sg) = curves {
@@ -268,7 +280,7 @@ pub fn select_ec_curve(client_extensions: &[Extension]) -> Result<NamedCurve> {
 pub fn select_cipher_suite(
     cipher_suites_from_client: &Vec<CipherSuite>,
     extensions: &Vec<Extension>,
-) -> Result<CipherSuite> {
+) -> AlertResult<CipherSuite> {
     let client_ec_curves = get_client_supported_named_curves(extensions)?;
     let can_use_ecdhe: bool;
 

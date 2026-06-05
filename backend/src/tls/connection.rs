@@ -4,7 +4,7 @@ use crate::cryptography::rsa::RSAPrivateKey;
 use crate::tls::connection_state::compression_method::CompressionMethod;
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::connection_state::security_parameters::{ConnectionEnd, SecurityParameters};
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::certificate::{ASN1Cert, Certificate};
 use crate::tls::record::change_cipher_spec::ChangeCipherSpec;
 use crate::tls::record::ciphers::cipher_suite::{self, CipherConfig};
@@ -21,13 +21,12 @@ use crate::tls::record::protocol_version::ProtocolVersion;
 use crate::tls::record::{Finished, Handshake, HandshakeType, Random, ServerKeyExchange};
 use crate::tls::tls_main::IOErrorOrTLSError;
 use crate::tls::WritableToSink;
-use crate::util::UintDisplay;
 use once_cell::sync::Lazy;
 use std::fs;
 use std::io::{Error, ErrorKind, Write};
 use std::net::TcpStream;
 
-pub static RSA_KEY: Lazy<Result<RSAPrivateKey>> = Lazy::new(|| {
+pub static RSA_KEY: Lazy<AlertResult<RSAPrivateKey>> = Lazy::new(|| {
     let key_content = fs::read_to_string("key.pem")
         .map_err(|e| Alert::internal_error(format!("Error reading key file: {}", e)))?;
     RSAPrivateKey::from_pem_content(key_content)
@@ -61,19 +60,19 @@ macro_rules! handshake_not_done {
 }
 
 impl ConnectionStates {
-    fn activate_pending(&mut self, entity: ConnectionEnd) -> Result<ConnectionState> {
+    fn activate_pending(&mut self, entity: ConnectionEnd) -> AlertResult<ConnectionState> {
         let mut param = self.pending_parameters.clone();
         param.entity = Some(entity);
         Ok(ConnectionState::new(param)?)
     }
 
-    fn activate_pending_read(&mut self) -> Result<()> {
+    fn activate_pending_read(&mut self) -> AlertResult<()> {
         let read = self.activate_pending(ConnectionEnd::Client)?;
         self.current_read = read;
         Ok(())
     }
 
-    fn activate_pending_write(&mut self) -> Result<()> {
+    fn activate_pending_write(&mut self) -> AlertResult<()> {
         let write = self.activate_pending(ConnectionEnd::Server)?;
         self.current_write = write;
         Ok(())
@@ -129,7 +128,7 @@ impl Connection {
         }
     }
 
-    fn read_change_cipher_spec(&mut self) -> Result<ChangeCipherSpec> {
+    fn read_change_cipher_spec(&mut self) -> Result<ChangeCipherSpec, IOErrorOrTLSError> {
         let plaintext = self.read_fragment()?;
 
         let ccs = plaintext.get_change_cipher_spec()?;
@@ -138,7 +137,7 @@ impl Connection {
 
     /// Returns the parsed Handshake and the bytes of the handshake message as a raw
     /// `Vec<u8>`.
-    fn read_handshake(&mut self) -> Result<(Handshake, Vec<u8>)> {
+    fn read_handshake(&mut self) -> Result<(Handshake, Vec<u8>), IOErrorOrTLSError> {
         let plaintext = self.read_fragment()?;
 
         let bytes = plaintext.fragment.clone();
@@ -147,37 +146,37 @@ impl Connection {
         Ok((handshake, bytes))
     }
 
-    fn read_client_hello(&mut self) -> Result<(ClientHello, Vec<u8>)> {
+    fn read_client_hello(&mut self) -> Result<(ClientHello, Vec<u8>), IOErrorOrTLSError> {
         let (handshake, bytes) = self.read_handshake()?;
 
         if let HandshakeType::ClientHello(ch) = handshake.msg_type {
             Ok((ch, bytes))
         } else {
-            Err(Alert::unexpected_message())
+            Err(Alert::unexpected_message().into())
         }
     }
 
-    fn read_client_key_exchange(&mut self) -> Result<(ClientKeyExchange, Vec<u8>)> {
+    fn read_client_key_exchange(&mut self) -> Result<(ClientKeyExchange, Vec<u8>), IOErrorOrTLSError> {
         let (handshake, bytes) = self.read_handshake()?;
 
         if let HandshakeType::ClientKeyExchange(cke) = handshake.msg_type {
             Ok((cke, bytes))
         } else {
-            Err(Alert::unexpected_message())
+            Err(Alert::unexpected_message().into())
         }
     }
 
-    fn read_finished(&mut self) -> Result<(Finished, Vec<u8>)> {
+    fn read_finished(&mut self) -> Result<(Finished, Vec<u8>), IOErrorOrTLSError> {
         let (handshake, bytes) = self.read_handshake()?;
 
         if let HandshakeType::Finished(f) = handshake.msg_type {
             Ok((f, bytes))
         } else {
-            Err(Alert::unexpected_message())
+            Err(Alert::unexpected_message().into())
         }
     }
 
-    fn send_server_hello(&mut self, client_hello: &ClientHello) -> Result<Vec<u8>> {
+    fn send_server_hello(&mut self, client_hello: &ClientHello) -> AlertResult<Vec<u8>> {
         let cipher_suite = cipher_suite::select_cipher_suite(
             &client_hello.cipher_suites,
             &client_hello.extensions,
@@ -217,7 +216,7 @@ impl Connection {
         self.send_fragment(ContentTypeWithContent::Handshake(handshake))
     }
 
-    fn send_certificate(&mut self) -> Result<Vec<u8>> {
+    fn send_certificate(&mut self) -> AlertResult<Vec<u8>> {
         let asn1cert = ASN1Cert::from_file("cert.pem").map_err(|e| {
             Alert::internal_error(format!("Failed reading certificate file: {}", e))
         })?;
@@ -230,7 +229,7 @@ impl Connection {
         self.send_fragment(ContentTypeWithContent::Handshake(handshake))
     }
 
-    fn send_server_key_exchange_ecdhe(&mut self, extensions: &[Extension]) -> Result<Vec<u8>> {
+    fn send_server_key_exchange_ecdhe(&mut self, extensions: &[Extension]) -> AlertResult<Vec<u8>> {
         let named_curve = cipher_suite::select_ec_curve(extensions)?;
 
         self.cipher_suite.unwrap().ec_curve = Some(named_curve);
@@ -281,7 +280,7 @@ impl Connection {
         self.send_fragment(ContentTypeWithContent::Handshake(handshake))
     }
 
-    fn send_server_hello_done(&mut self) -> Result<Vec<u8>> {
+    fn send_server_hello_done(&mut self) -> AlertResult<Vec<u8>> {
         let server_hello_done = ServerHelloDone {};
 
         let handshake = Handshake::new(HandshakeType::ServerHelloDone(server_hello_done));
@@ -291,7 +290,7 @@ impl Connection {
     /// Responds to the ClientHello Message by sending a ServerHello, Certificate and ServerHelloDone
     /// message while also adjusting the pending SecurityParameters. Also adds the bytes of the
     /// handshake layer to `self.handshake_messages`.
-    fn respond_to_client_hello(&mut self, client_hello: &ClientHello) -> Result<()> {
+    fn respond_to_client_hello(&mut self, client_hello: &ClientHello) -> AlertResult<()> {
         let mut bytes = self.send_server_hello(client_hello)?;
         self.handshake_messages.append(&mut bytes);
 
@@ -317,12 +316,12 @@ impl Connection {
         Ok(())
     }
 
-    fn send_change_cipher_spec(&mut self) -> Result<Vec<u8>> {
+    fn send_change_cipher_spec(&mut self) -> AlertResult<Vec<u8>> {
         let change_cipher_spec = ChangeCipherSpec::ChangeCipherSpec;
         self.send_fragment(ContentTypeWithContent::ChangeCipherSpec(change_cipher_spec))
     }
 
-    fn send_finished(&mut self) -> Result<Vec<u8>> {
+    fn send_finished(&mut self) -> AlertResult<Vec<u8>> {
         let verify_data = Finished::calculate_verify_data(
             &self.connection_states.current_write,
             &self.handshake_messages,
@@ -333,7 +332,7 @@ impl Connection {
         self.send_fragment(ContentTypeWithContent::Handshake(handshake))
     }
 
-    fn read_fragment(&mut self) -> Result<TLSPlaintext> {
+    fn read_fragment(&mut self) -> AlertResult<TLSPlaintext> {
         let ciphertext = TLSCiphertext::read_from_connection(self)?;
         let compressed = ciphertext.decrypt(&self.connection_states.current_read)?;
         let plaintext = compressed.decompress(&self.connection_states.current_read)?;
@@ -346,7 +345,7 @@ impl Connection {
 
     /// Sends the `content`, adds a header and encrypts the message. Returns the bytes of the
     /// handshake message (without header).
-    fn send_fragment(&mut self, content: ContentTypeWithContent) -> Result<Vec<u8>> {
+    fn send_fragment(&mut self, content: ContentTypeWithContent) -> AlertResult<Vec<u8>> {
         let tls_plaintext = TLSPlaintext::new(
             content,
             ProtocolVersion::tls1_2(),
@@ -374,7 +373,7 @@ impl Connection {
     fn decode_pre_master_secret(
         &mut self,
         client_key_exchange: ClientKeyExchange,
-    ) -> Result<PreMasterSecret> {
+    ) -> AlertResult<PreMasterSecret> {
         match self.cipher_suite.as_ref().unwrap().key_exchange {
             KeyExchangeAlgorithm::Null => Err(Alert::internal_error(
                 "KeyExchange null not implemented; should not come here",
@@ -416,7 +415,7 @@ impl Connection {
     fn convert_pre_master_to_master(
         &mut self,
         pre_master_secret: PreMasterSecret,
-    ) -> Result<[u8; 48]> {
+    ) -> AlertResult<[u8; 48]> {
         let prf_func = self.connection_states.pending_parameters.prf_algorithm()?;
         Ok(pre_master_secret
             .convert_to_master(prf_func, &self.connection_states.pending_parameters))

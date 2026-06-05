@@ -1,6 +1,6 @@
 use crate::cryptography::pkcs1_v1_5;
 use crate::cryptography::rsa::RSAPrivateKey;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::record::cryptographic_attributes::PublicKeyEncrypted;
 use crate::tls::record::key_exchange::pre_master_secret::{PreMasterSecret, PreMasterSecretRsa};
@@ -17,7 +17,7 @@ impl EncryptedPreMasterSecret {
         self,
         key: &RSAPrivateKey,
         cipher_config: Option<&CipherConfig>,
-    ) -> Result<PreMasterSecret> {
+    ) -> AlertResult<PreMasterSecret> {
         self.pre_master_secret
             .decrypt(
                 move |bytes| {

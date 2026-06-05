@@ -1,5 +1,5 @@
 use crate::tls::connection_state::connection_state::ConnectionState;
-use crate::tls::record::alert::Result;
+use crate::tls::record::alert::AlertResult;
 use crate::tls::record::fragmentation::tls_ciphertext::TLSCiphertext;
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use std::fmt::Debug;
@@ -9,11 +9,11 @@ pub trait TLSCipher: Debug {
         &self,
         plaintext: TLSCompressed,
         con_state: &ConnectionState,
-    ) -> Result<TLSCiphertext>;
+    ) -> AlertResult<TLSCiphertext>;
     fn decrypt(
         &self,
         ciphertext: TLSCiphertext,
         con_state: &ConnectionState,
-    ) -> Result<TLSCompressed>;
+    ) -> AlertResult<TLSCompressed>;
 }
 

@@ -125,7 +125,7 @@ pub fn impl_readable_from_stream_trait(ast: DeriveInput) -> TokenStream {
 
     quote! {
         impl #generics crate::tls::ReadableFromStream for #name #generics #generics_where {
-            fn read(stream: &mut impl Iterator<Item=u8>, suite: Option<&crate::tls::record::ciphers::cipher_suite::CipherConfig>) -> crate::tls::record::alert::Result<Self> {
+            fn read(stream: &mut impl Iterator<Item=u8>, suite: Option<&crate::tls::record::ciphers::cipher_suite::CipherConfig>) -> crate::tls::record::alert::AlertResult<Self> {
                 #body
             }
         }

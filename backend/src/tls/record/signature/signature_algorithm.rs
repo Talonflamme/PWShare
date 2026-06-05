@@ -1,6 +1,6 @@
 use super::{rsa, HashAlgorithm, Signature, SignatureAndHashAlgorithm};
 use crate::tls::connection::RSA_KEY;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::record::cryptographic_attributes::DigitallySigned;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
@@ -17,7 +17,7 @@ pub enum SignatureAlgorithm {
 }
 
 impl SignatureAlgorithm {
-    pub fn sign(self, message: &[u8], hash: HashAlgorithm) -> Result<Signature> {
+    pub fn sign(self, message: &[u8], hash: HashAlgorithm) -> AlertResult<Signature> {
         let sig_and_hash = SignatureAndHashAlgorithm {
             hash,
             signature: self,
@@ -45,7 +45,7 @@ impl SignatureAlgorithm {
 }
 
 impl ReadableFromStream for SignatureAlgorithm {
-    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
+    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> AlertResult<Self> {
         let u = u8::read(stream, suite)?;
 
         Ok(Self::try_from(u).unwrap_or(Self::Unknown))
@@ -53,7 +53,7 @@ impl ReadableFromStream for SignatureAlgorithm {
 }
 
 impl WritableToSink for SignatureAlgorithm {
-    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> AlertResult<()> {
         if matches!(self, Self::Unknown) {
             Err(Alert::internal_error(
                 "Cannot write unknown SignatureAlgorithm",

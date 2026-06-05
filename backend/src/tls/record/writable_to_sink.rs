@@ -1,4 +1,4 @@
-use crate::tls::record::alert::Result;
+use crate::tls::record::alert::AlertResult;
 use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 
 pub trait Sink<T> {
@@ -32,13 +32,13 @@ pub trait WritableToSink: Sized {
     /// to the buffer. Returns an `Err` if something with the data was wrong. If a
     /// `CipherSuite` was already chosen, the `suite` parameter will be 
     /// `Some(chosen_suite)`. This will be `None` otherwise.
-    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()>;
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> AlertResult<()>;
 }
 
 macro_rules! impl_writable_to_sink_uint {
     ($uint:ident) => {
         impl WritableToSink for $uint {
-            fn write(&self, buffer: &mut impl Sink<u8>, _: Option<&CipherConfig>) -> Result<()> {
+            fn write(&self, buffer: &mut impl Sink<u8>, _: Option<&CipherConfig>) -> AlertResult<()> {
                 buffer.extend_from_slice(&self.to_be_bytes());
                 Ok(())
             }
@@ -47,7 +47,7 @@ macro_rules! impl_writable_to_sink_uint {
 }
 
 impl WritableToSink for u8 {
-    fn write(&self, buffer: &mut impl Sink<u8>, _: Option<&CipherConfig>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, _: Option<&CipherConfig>) -> AlertResult<()> {
         buffer.push(self.clone());
         Ok(())
     }
@@ -61,7 +61,7 @@ impl<T, const N: usize> WritableToSink for [T; N]
 where
     T: WritableToSink,
 {
-    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> AlertResult<()> {
         for e in self {
             e.write(buffer, suite)?;
         }

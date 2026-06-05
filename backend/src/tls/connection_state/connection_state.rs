@@ -1,7 +1,7 @@
 use crate::tls::connection_state::security_parameters::{
     BulkCipherAlgorithm, ConnectionEnd, SecurityParameters,
 };
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::ciphers::aead::aes_gcm::{TlsAes128Gcm, TlsAes256Gcm};
 use crate::tls::record::ciphers::block::aes_cbc::{TlsAes128CbcCipher, TlsAes256CbcCipher};
 use crate::tls::record::ciphers::cipher::TLSCipher;
@@ -25,7 +25,7 @@ pub struct ConnectionState {
     pub write_iv: Vec<u8>,
 }
 
-fn get_cipher(cipher_type: BulkCipherAlgorithm, key: Vec<u8>) -> Result<Box<dyn TLSCipher>> {
+fn get_cipher(cipher_type: BulkCipherAlgorithm, key: Vec<u8>) -> AlertResult<Box<dyn TLSCipher>> {
     match cipher_type {
         BulkCipherAlgorithm::Null => Ok(Box::new(TLSNullCipher {})),
         BulkCipherAlgorithm::Rc4 => Err(Alert::internal_error("RC4 is not implemented")),
@@ -48,7 +48,7 @@ impl ConnectionState {
         }
     }
 
-    pub fn new(parameters: SecurityParameters) -> Result<Self> {
+    pub fn new(parameters: SecurityParameters) -> AlertResult<Self> {
         let prf = parameters.prf_algorithm()?;
 
         let mut seed = [0u8; 64];

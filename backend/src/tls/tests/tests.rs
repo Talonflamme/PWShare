@@ -106,7 +106,7 @@ fn test_cipher_suite(cipher_suite: CipherSuite, index: usize, args: Vec<&str>) {
     assert!(output.status.success());
 }
 
-generate_cipher_suite_tests!(SUPPORTED_CIPHER_SUITES, 7);
+generate_cipher_suite_tests!(SUPPORTED_CIPHER_SUITES, 8);
 
 fn test_ecdhe(curve: &str, index: usize) {
     println!(

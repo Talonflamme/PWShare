@@ -1,7 +1,7 @@
 use crate::tls::connection::Connection;
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::connection_state::security_parameters;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::cryptographic_attributes::{AeadCiphered, BlockCiphered, StreamCiphered};
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::fragmentation::tls_plaintext::ContentType;
@@ -16,7 +16,7 @@ pub(crate) struct GenericStreamCipher {
 }
 
 impl GenericStreamCipher {
-    pub fn read(fragment: Vec<u8>, con_state: &ConnectionState) -> Result<Self> {
+    pub fn read(fragment: Vec<u8>, con_state: &ConnectionState) -> AlertResult<Self> {
         let mac_length = *con_state.parameters.mac_length()? as usize;
 
         let mut content = fragment;
@@ -40,7 +40,7 @@ pub(crate) struct GenericBlockCipher {
 }
 
 impl GenericBlockCipher {
-    fn read(mut fragment: Vec<u8>, con_state: &ConnectionState) -> Result<Self> {
+    fn read(mut fragment: Vec<u8>, con_state: &ConnectionState) -> AlertResult<Self> {
         let record_iv_length = *con_state.parameters.record_iv_length()? as usize;
 
         let block_ciphered = fragment.split_off(record_iv_length);
@@ -54,7 +54,7 @@ impl GenericBlockCipher {
 }
 
 impl WritableToSink for GenericBlockCipher {
-    fn write(&self, buffer: &mut impl Sink<u8>, _: Option<&CipherConfig>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, _: Option<&CipherConfig>) -> AlertResult<()> {
         buffer.extend_from_slice(self.iv.as_slice());
         buffer.extend_from_slice(self.inner.bytes.as_slice());
         Ok(())
@@ -87,7 +87,7 @@ pub(crate) struct GenericAEADCipher {
 }
 
 impl GenericAEADCipher {
-    fn read(mut fragment: Vec<u8>, con_state: &ConnectionState) -> Result<Self> {
+    fn read(mut fragment: Vec<u8>, con_state: &ConnectionState) -> AlertResult<Self> {
         let record_iv_length = *con_state.parameters.record_iv_length()? as usize;
 
         if fragment.len() < record_iv_length + 16 {
@@ -106,7 +106,7 @@ impl GenericAEADCipher {
 }
 
 impl WritableToSink for GenericAEADCipher {
-    fn write(&self, buffer: &mut impl Sink<u8>, _: Option<&CipherConfig>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, _: Option<&CipherConfig>) -> AlertResult<()> {
         buffer.extend_from_slice(&self.nonce_explicit);
         buffer.extend_from_slice(&self.content.bytes);
         Ok(())
@@ -120,7 +120,7 @@ pub(crate) enum CipherType {
 }
 
 impl WritableToSink for CipherType {
-    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> AlertResult<()> {
         // here, we do not include a discriminant before, since
         // the variant depends on SecurityParameters.cipher_type
         match self {
@@ -142,12 +142,12 @@ pub struct TLSCiphertext {
 
 /// Encrypts the given `TLSCompressed` to a `TLSCiphertext` using the cipher
 /// specified in `con_state`. Also computes the `MAC` - if specified.
-pub fn encrypt(compressed: TLSCompressed, con_state: &ConnectionState) -> Result<TLSCiphertext> {
+pub fn encrypt(compressed: TLSCompressed, con_state: &ConnectionState) -> AlertResult<TLSCiphertext> {
     con_state.cipher.encrypt(compressed, con_state)
 }
 
 impl TLSCiphertext {
-    pub fn read_from_connection(con: &mut Connection) -> Result<Self> {
+    pub fn read_from_connection(con: &mut Connection) -> AlertResult<Self> {
         // Header contains 5 bytes
         let mut header_buf = [0u8; 5];
         con
@@ -194,13 +194,13 @@ impl TLSCiphertext {
         })
     }
 
-    pub fn decrypt(self, con_state: &ConnectionState) -> Result<TLSCompressed> {
+    pub fn decrypt(self, con_state: &ConnectionState) -> AlertResult<TLSCompressed> {
         con_state.cipher.decrypt(self, con_state)
     }
 }
 
 impl WritableToSink for TLSCiphertext {
-    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> AlertResult<()> {
         self.content_type.write(buffer, suite)?; // .type
         self.version.write(buffer, suite)?; // .version
 

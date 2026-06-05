@@ -1,5 +1,5 @@
 use super::SignatureAlgorithm;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::record::cryptographic_attributes::DigitallySigned;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
@@ -13,7 +13,7 @@ pub enum Signature {
 }
 
 impl ReadableFromStream for Signature {
-    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
+    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> AlertResult<Self> {
         let s = suite.ok_or(Alert::internal_error(
             "Reading Signature when no cipher suite is negotiated",
         ))?;
@@ -31,7 +31,7 @@ impl ReadableFromStream for Signature {
 }
 
 impl WritableToSink for Signature {
-    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> AlertResult<()> {
         match self {
             Signature::Anonymous() => {}
             Signature::RSA(ds) => ds.write(buffer, suite)?,

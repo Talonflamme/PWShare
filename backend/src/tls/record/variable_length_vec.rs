@@ -1,4 +1,4 @@
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::readable_from_stream::ReadableFromStream;
 use crate::tls::{Sink, WritableToSink};
 use std::fmt::{Debug, Formatter};
@@ -45,7 +45,7 @@ impl<T, const MIN: usize, const MAX: usize> ReadableFromStream for VariableLengt
 where
     T: ReadableFromStream,
 {
-    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
+    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> AlertResult<Self> {
         let amount_bytes_for_len = (MAX as f64).log(256.0).ceil() as usize;
 
         let mut buf = [0; size_of::<usize>()];
@@ -81,7 +81,7 @@ impl<T, const MIN: usize, const MAX: usize> WritableToSink for VariableLengthVec
 where
     T: WritableToSink,
 {
-    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> AlertResult<()> {
         let amount_bytes_for_len = (MAX as f64).log(256.0).ceil() as usize;
 
         // we use a separate Vec<u8> here, because we need to verify that the length is in bounds

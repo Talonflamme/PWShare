@@ -9,7 +9,7 @@ use crate::tls::record::writable_to_sink::{Sink, WritableToSink};
 use crate::tls::ReadableFromStream;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 use std::fmt::Debug;
-use crate::tls::record::alert::{Alert, Result};
+use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 
 #[repr(u8)]
@@ -40,7 +40,7 @@ impl Handshake {
 }
 
 impl ReadableFromStream for Handshake {
-    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> Result<Self> {
+    fn read(stream: &mut impl Iterator<Item = u8>, suite: Option<&CipherConfig>) -> AlertResult<Self> {
         let [bytes0, bytes1, bytes2, bytes3] = u32::read(stream, suite)?.to_be_bytes();
 
         // in TLS, the length is u24
@@ -61,7 +61,7 @@ impl ReadableFromStream for Handshake {
 }
 
 impl WritableToSink for Handshake {
-    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> Result<()> {
+    fn write(&self, buffer: &mut impl Sink<u8>, suite: Option<&CipherConfig>) -> AlertResult<()> {
         let mut body_buffer: Vec<u8> = Vec::new();
 
         let typ = match &self.msg_type {
