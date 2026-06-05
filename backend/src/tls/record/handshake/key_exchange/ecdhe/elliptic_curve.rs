@@ -61,7 +61,6 @@ impl ECPoint {
         }
     }
 
-    // TODO: maybe even use one coordinate (BigUint) instead of Point
     pub fn to_point(self, curve: NamedCurve) -> Result<Point> {
         match curve {
             // Weierstrass curves are encoded with the UncompressedPointRepresentation struct
