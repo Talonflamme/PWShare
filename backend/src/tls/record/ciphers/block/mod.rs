@@ -1,6 +1,5 @@
 pub mod aes_cbc;
 
-use crate::cryptography::rng::rng;
 use crate::tls::connection_state::connection_state::ConnectionState;
 use crate::tls::record::alert::{Alert, AlertResult};
 use crate::tls::record::ciphers::cipher::TLSCipher;
@@ -10,8 +9,8 @@ use crate::tls::record::fragmentation::tls_ciphertext::{
 };
 use crate::tls::record::fragmentation::tls_compressed::TLSCompressed;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
-use rand::RngCore;
 use std::fmt::Debug;
+use rand::Rng;
 
 pub(super) trait TLSBlockCipher: Debug + TLSCipher {
     fn encrypt_struct(
@@ -48,7 +47,7 @@ pub(super) fn block_encrypt(
     let block_size = *con_state.parameters.block_length()? as usize;
 
     let mut iv = vec![0; record_iv_len];
-    rng!().fill_bytes(iv.as_mut_slice());
+    rand::rng().fill_bytes(iv.as_mut_slice());
 
     // TLSCiphertext.length = 1 + block_length + TLSCompressed.length + mac_length + padding_length
     // This length must be a multiple of block_length

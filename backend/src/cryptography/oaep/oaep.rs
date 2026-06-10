@@ -1,12 +1,11 @@
-use rand::RngCore;
-use crate::cryptography::rng::rng;
 use crate::cryptography::hashing::{HashFunction, Sha256};
 use crate::cryptography::oaep::mgf1;
+use rand::Rng;
 
 fn generate_random_seed(h_len: usize) -> Vec<u8> {
     let mut result = vec![0u8; h_len];
 
-    rng!().fill_bytes(result.as_mut_slice());
+    rand::rng().fill_bytes(result.as_mut_slice());
 
     result
 }

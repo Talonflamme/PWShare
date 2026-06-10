@@ -1,6 +1,5 @@
+use rand::Rng;
 use pwshare_macros::{ReadableFromStream, WritableToSink};
-use rand::rngs::OsRng;
-use rand_chacha::rand_core::RngCore;
 
 #[derive(Debug, PartialEq, Eq, ReadableFromStream, WritableToSink)]
 pub struct Random {
@@ -12,7 +11,8 @@ impl Random {
     /// Generates a random `Random` struct. Each byte (including the gmt_unix_time) is
     /// generated randomly.
     pub fn generate() -> Random {
-        let rng = &mut OsRng;
+        let mut rng = rand::rng();
+
         let gmt_unix_time = rng.next_u32();
         
         let mut random_bytes = [0; 28];

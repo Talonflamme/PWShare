@@ -1,7 +1,6 @@
 use crate::cryptography::aes::aes::AES;
 use crate::cryptography::aes::sbox::SBOX;
-use crate::cryptography::rng::rng;
-use rand::RngCore;
+use rand::Rng;
 use std::fmt::{Debug, Display, Formatter};
 
 pub trait AESKey: Clone + Debug {
@@ -57,7 +56,7 @@ macro_rules! impl_aes_key {
                 let mut key = [0; Self::N];
 
                 for v in key.iter_mut() {
-                    *v = rng!().next_u32();
+                    *v = rand::rng().next_u32();
                 }
 
                 Self::new(key)

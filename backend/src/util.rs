@@ -1,4 +1,4 @@
-use num_bigint::BigUint;
+use crypto_bigint::{BoxedUint, Uint};
 use std::time::{Duration, SystemTime};
 
 pub fn time<T, F: Fn() -> T>(f: F) -> (Duration, T) {
@@ -35,17 +35,17 @@ pub trait UintDisplay {
     fn radix(&self, radix: u32) -> Result<String, UintToRadixError>;
 }
 
-impl UintDisplay for BigUint {
-    fn hex_with_sep(&self, _: &str) -> String {
+impl<const L: usize> UintDisplay for Uint<L> {
+    fn hex_with_sep(&self, _sep: &str) -> String {
         self.hex()
     }
 
     fn radix(&self, radix: u32) -> Result<String, UintToRadixError> {
-        Ok(self.to_str_radix(radix))
+        Ok(self.to_string_radix_vartime(radix))
     }
 }
 
-impl UintDisplay for Vec<BigUint> {
+impl<const L: usize> UintDisplay for Vec<Uint<L>> {
     fn hex_with_sep(&self, sep: &str) -> String {
         self.iter()
             .map(|uint| uint.hex())
@@ -54,12 +54,37 @@ impl UintDisplay for Vec<BigUint> {
     }
 
     fn radix(&self, radix: u32) -> Result<String, UintToRadixError> {
-        let mut strings = Vec::new();
+        let strings: Vec<String> = self
+            .iter()
+            .map(|uint| uint.to_string_radix_vartime(radix))
+            .collect();
+        Ok(format!("{:?}", strings))
+    }
+}
 
-        for u in self.iter() {
-            strings.push(u.radix(radix)?);
-        }
+impl UintDisplay for BoxedUint {
+    fn hex_with_sep(&self, _sep: &str) -> String {
+        self.hex()
+    }
 
+    fn radix(&self, radix: u32) -> Result<String, UintToRadixError> {
+        Ok(self.to_string_radix_vartime(radix))
+    }
+}
+
+impl UintDisplay for Vec<BoxedUint> {
+    fn hex_with_sep(&self, sep: &str) -> String {
+        self.iter()
+            .map(|uint| uint.hex())
+            .collect::<Vec<_>>()
+            .join(sep)
+    }
+
+    fn radix(&self, radix: u32) -> Result<String, UintToRadixError> {
+        let strings: Vec<String> = self
+            .iter()
+            .map(|uint| uint.to_string_radix_vartime(radix))
+            .collect();
         Ok(format!("{:?}", strings))
     }
 }

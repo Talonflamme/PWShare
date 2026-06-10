@@ -1,38 +1,38 @@
-use std::ops::Rem;
 use super::precompute::{SmallPrimeType, NUM_SMALL_PRIMES, SMALL_PRIMES};
-use num_bigint::BigUint;
+use crypto_bigint::{BitOps, CheckedAdd, Limb, NonZero, Unsigned};
+use crypto_bigint::{BoxedUint, Choice, Odd};
 
 /// Implementation of the Sieve of Eratosthenes algorithm.
 /// Works by selecting a set of small prime numbers. Each multiple is marked as a trivial number.
 /// The remaining ones are non-trivial numbers and (even though not safe) could be primes.
 pub(super) struct Sieve {
     /// the last found non-trivial number
-    current: BigUint,
+    current: Odd<BoxedUint>,
     // this slice is updated each iteration. Each entry represents the last checked number (mod p)
     last_mod: [SmallPrimeType; NUM_SMALL_PRIMES],
     /// Max amount of bits
-    bits: u64
+    bits: u64,
 }
 
 impl Sieve {
     /// Creates a new Sieve starting at `start`.
     /// Note that `start` is <b>not</b> included in the iterator.
     /// `bits` - the max amount of bits for any BigUint returned by this.
-    pub fn new(mut start: BigUint, bits: u64) -> Self {
-        start.set_bit(0, true); // make sure it's odd
+    pub fn new(mut start: BoxedUint, bits: u64) -> Self {
+        start.set_bit(0, Choice::TRUE); // make sure it's odd
 
         let mut last_mod = [0; NUM_SMALL_PRIMES];
 
         // make each value the biggest multiple of the corresponding prime that is less/equal than start
         last_mod.iter_mut().enumerate().for_each(|(i, x)| {
-            let rem = (&start).rem(SMALL_PRIMES[i]);
-            *x = rem.try_into().unwrap();
+            let rem = (&start).rem_limb(NonZero::new(Limb(SMALL_PRIMES[i] as u64)).unwrap());
+            *x = rem.0.try_into().unwrap();
         });
 
         Sieve {
-            current: start,
+            current: start.into_odd().unwrap(),
             last_mod,
-            bits
+            bits,
         }
     }
 
@@ -61,22 +61,24 @@ impl Sieve {
 }
 
 impl Iterator for Sieve {
-    type Item = BigUint;
+    type Item = Odd<BoxedUint>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let increment: SmallPrimeType = 2; // how much we move current each iteration
+        let increment_boxed_uint = BoxedUint::from_limb_like(Limb(increment as u64), &self.current);
 
         // we increment self.current until we find a value, that is not a multiple of any prime
         loop {
-            let next = (&self.current) + &increment;
-
-            if next.bits() > self.bits {
+            let Some(next) = (&self.current)
+                .checked_add(&increment_boxed_uint)
+                .into_option()
+            else {
                 return None;
-            }
+            };
 
             let non_trivial = self.update_progress(increment);
 
-            self.current = next;
+            self.current = next.into_odd().unwrap(); // always odd
 
             if non_trivial {
                 return Some(self.current.clone());

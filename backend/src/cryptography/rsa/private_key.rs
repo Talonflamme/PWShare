@@ -1,20 +1,19 @@
-use crate::cryptography::rsa::modular_arithmetic::ModularArithmetic;
 use crate::cryptography::rsa::RSAPublicKey;
-use num_bigint::BigUint;
+use crypto_bigint::{BoxedUint, Encoding, Odd, One};
 use std::fmt::{Debug, Display};
 
 #[derive(Debug)]
 pub struct RSAPrivateKey {
-    pub n: BigUint,
-    pub d: BigUint,
-    pub e: BigUint,
-    pub p: BigUint,
-    pub q: BigUint,
+    pub n: Odd<BoxedUint>,
+    pub d: BoxedUint,
+    pub e: BoxedUint,
+    pub p: Odd<BoxedUint>,
+    pub q: Odd<BoxedUint>,
     /// d mod (p - 1)
-    pub d_mod_p_minus_1: BigUint,
+    pub d_mod_p_minus_1: BoxedUint,
     /// d mod (p - 1)
-    pub d_mod_q_minus_1: BigUint,
-    pub inverse_q_mod_p: BigUint,
+    pub d_mod_q_minus_1: BoxedUint,
+    pub inverse_q_mod_p: BoxedUint,
 }
 
 #[derive(Debug)]
@@ -24,14 +23,14 @@ pub struct DecryptError {
 
 impl RSAPrivateKey {
     pub fn new_detailed(
-        n: BigUint,
-        d: BigUint,
-        e: BigUint,
-        p: BigUint,
-        q: BigUint,
-        d_mod_p_minus_1: BigUint,
-        d_mod_q_minus_1: BigUint,
-        inverse_q_mod_p: BigUint,
+        n: Odd<BoxedUint>,
+        d: BoxedUint,
+        e: BoxedUint,
+        p: Odd<BoxedUint>,
+        q: Odd<BoxedUint>,
+        d_mod_p_minus_1: BoxedUint,
+        d_mod_q_minus_1: BoxedUint,
+        inverse_q_mod_p: BoxedUint,
     ) -> Self {
         Self {
             n,
@@ -45,36 +44,43 @@ impl RSAPrivateKey {
         }
     }
 
-    pub fn new(n: BigUint, d: BigUint, e: BigUint, mut p: BigUint, mut q: BigUint) -> Self {
-        // since p and q are prime and hence odd, setting bit 0 to 0 effectively subtracts 1 from it
-        // this saves a clone
-        p.set_bit(0, false); // subtract 1
-        let exp1 = &d % &p;
-        p.set_bit(0, true);
+    pub fn new(
+        n: Odd<BoxedUint>,
+        d: BoxedUint,
+        e: BoxedUint,
+        p: Odd<BoxedUint>,
+        q: Odd<BoxedUint>,
+    ) -> Self {
+        let p_minus_1 = p.as_ref() - BoxedUint::one_like(&p);
+        let q_minus_1 = q.as_ref() - BoxedUint::one_like(&q);
 
-        q.set_bit(0, false); // subtract 1
-        let exp2 = &d % &q;
-        q.set_bit(0, true);
+        let exp1 = &d % p_minus_1.into_nz().unwrap();
+        let exp2 = &d % q_minus_1.into_nz().unwrap();
 
-        let inv = q.modinv(&p).unwrap();
+        let inv = q.invert_mod(&p.as_nz_ref()).unwrap();
 
         Self::new_detailed(n, d, e, p, q, exp1, exp2, inv)
     }
 
-    /// Computes `M^d (mod n)` and returns the result or an error if `M` was outside of 
+    /// Computes `M^d (mod n)` and returns the result or an error if `M` was outside of
     /// range.
-    pub fn decrypt(&self, message_cipher: BigUint) -> Result<BigUint, DecryptError> {
-        if self.n <= message_cipher {
+    ///
+    /// See [RFC 8017 Section 5.1.2](https://datatracker.ietf.org/doc/html/rfc8017#section-5.1.2)
+    /// for the exact algorithm.
+    pub fn decrypt(&self, message_cipher: BoxedUint) -> Result<BoxedUint, DecryptError> {
+        if self.n.as_ref() <= &message_cipher {
             Err(DecryptError {
                 reason: "ciphertext representative out of range",
             })
         } else {
-            // m = c^d mod n
-            let m1 = message_cipher.modpow(&self.d_mod_p_minus_1, &self.p);
-            let m2 = message_cipher.modpow(&self.d_mod_q_minus_1, &self.q);
+            // use Chinese Remainder Theorem (CRT) to save some computation
+            let m_p = message_cipher.pow_mod(&self.d_mod_p_minus_1, &self.p);
+            let m_q = message_cipher.pow_mod(&self.d_mod_q_minus_1, &self.q);
 
-            let h = (&m1).subm(&m2, &self.p).mulm(&self.inverse_q_mod_p, &self.p);
-            let m = (m2 + h * &self.q) % &self.n;
+            let diff = m_p.sub_mod(&m_q, self.p.as_nz_ref());
+            let h = diff.mul_mod(&self.inverse_q_mod_p, self.p.as_nz_ref());
+
+            let m = m_q + h * self.q.as_ref();
             Ok(m)
         }
     }
@@ -86,15 +92,9 @@ impl RSAPrivateKey {
             });
         }
 
-        let uint = BigUint::from_bytes_be(ciphertext);
+        let uint = BoxedUint::from_be_bytes(ciphertext.into());
         let plain = self.decrypt(uint)?;
-        let plain_size = plain.bits().div_ceil(8) as usize;
-
-        let mut result = vec![0; self.size_in_bytes() - plain_size];
-
-        result.extend_from_slice(&plain.to_bytes_be());
-
-        Ok(result)
+        Ok(plain.to_be_bytes().into())
     }
 
     pub fn public(&self) -> RSAPublicKey {

@@ -1,6 +1,7 @@
+use std::collections::VecDeque;
 use crate::cryptography::rsa::{RSAPrivateKey, RSAPublicKey};
-use num_bigint::BigUint;
-use num_traits::One;
+use crate::util::UintDisplay;
+use crypto_bigint::{BoxedUint, Encoding, One, Resize};
 
 fn encode_length(length: usize, result: &mut Vec<u8>) {
     if length <= 127 {
@@ -70,12 +71,13 @@ pub fn decode_null(iter: &mut impl Iterator<Item = u8>) -> Result<(), &'static s
     Ok(())
 }
 
-fn encode_big_integer(integer: &BigUint) -> Vec<u8> {
+fn encode_big_integer(integer: &BoxedUint) -> Vec<u8> {
     let mut result = Vec::new();
 
     // Tag
     result.push(0x02); // Tag: Integer
-    let bytes = integer.to_bytes_be();
+    let bytes = integer.to_be_bytes();
+    let bytes: Vec<u8> = bytes.iter().skip_while(|&&b| b == 0u8).copied().collect();
 
     // bit 8 of first byte = 1 -> number is interpreted as negative, even though it isn't
     // we need to prefix a zero byte to indicate that it is positive
@@ -169,7 +171,9 @@ pub fn encode_object_identifier(components: &[u32]) -> Vec<u8> {
     result
 }
 
-pub fn decode_object_identifier(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u32>, &'static str> {
+pub fn decode_object_identifier(
+    iter: &mut impl Iterator<Item = u8>,
+) -> Result<Vec<u32>, &'static str> {
     let tag = iter.next().ok_or("Expected 0x06, got none")?;
 
     if tag != 0x06 {
@@ -268,7 +272,7 @@ fn decode_integer(iter: &mut impl Iterator<Item = u8>) -> Result<i64, &'static s
     Ok(i64::from_be_bytes(result))
 }
 
-fn decode_big_integer(iter: &mut impl Iterator<Item = u8>) -> Result<BigUint, &'static str> {
+fn decode_big_integer(iter: &mut impl Iterator<Item = u8>) -> Result<BoxedUint, &'static str> {
     let tag = iter.next().ok_or("0x02 expected, none found")?;
 
     if tag != 0x02 {
@@ -276,14 +280,20 @@ fn decode_big_integer(iter: &mut impl Iterator<Item = u8>) -> Result<BigUint, &'
     }
 
     let length = decode_length(iter)?;
-    let bytes: Vec<u8> = iter.take(length).collect();
+    // skip leading zeros, as they are prefixed for the sign
+    // (but we only deal with unsigned integers, so they don't matter and must be skipped to retain correct bit amount).
+    let mut bytes: Vec<u8> = iter.take(length).collect();
 
     if bytes[0] & 0x80 != 0 {
         // negative
         return Err("Negative number");
     }
 
-    Ok(BigUint::from_bytes_be(&bytes))
+    if bytes[0] == 0 {
+        bytes.remove(0); // remove leading 0, only needed to signal that the integer is positive
+    }
+
+    Ok(BoxedUint::from_be_bytes(bytes.into()))
 }
 
 pub fn decode_sequence(iter: &mut impl Iterator<Item = u8>) -> Result<Vec<u8>, &'static str> {
@@ -421,6 +431,10 @@ impl RSAPublicKey {
             return Err("Expected EOF");
         }
 
+        let Some(n) = n.into_odd().into_option() else {
+            return Err("n must be odd");
+        };
+
         Ok(Self::new(n, e))
     }
 }
@@ -465,17 +479,15 @@ impl RSAPrivateKey {
         sequence.append(&mut encode_big_integer(&self.q));
 
         // exponent 1 - d mod (p - 1)
-        sequence.append(&mut encode_big_integer(
-            &(&self.d % (&self.p - &BigUint::one())),
-        ));
+        sequence.append(&mut encode_big_integer(&self.d_mod_p_minus_1));
 
         // exponent 2 - d mod (q - 1)
-        sequence.append(&mut encode_big_integer(
-            &(&self.d % (&self.q - BigUint::one())),
-        ));
+        sequence.append(&mut encode_big_integer(&self.d_mod_q_minus_1));
 
         // coefficient - (inverse of q) mod p
-        sequence.append(&mut encode_big_integer(&self.q.modinv(&self.p).unwrap()));
+        sequence.append(&mut encode_big_integer(
+            &self.q.invert_mod(self.p.as_nz_ref()).unwrap(),
+        ));
 
         encode_octet_string(encode_sequence(sequence))
     }
@@ -547,37 +559,48 @@ impl RSAPrivateKey {
         Self::decode_version(&mut iter, 0)?;
 
         // modulus - n
-        let n = decode_big_integer(&mut iter)?;
+        let n = decode_big_integer(&mut iter)?
+            .into_odd()
+            .ok_or("n is even")?;
+
+        let bits = n.bits_precision();
 
         // public exponent - e
-        let e = decode_big_integer(&mut iter)?;
+        let e = decode_big_integer(&mut iter)?.resize(bits);
 
         // private exponent - d
-        let d = decode_big_integer(&mut iter)?;
+        let d = decode_big_integer(&mut iter)?.resize(bits);
 
         // prime 1 - p
-        let p = decode_big_integer(&mut iter)?;
+        let p = decode_big_integer(&mut iter)?
+            .resize(bits)
+            .into_odd()
+            .ok_or("p is even")?;
+
         // prime 2 - q
-        let q = decode_big_integer(&mut iter)?;
+        let q = decode_big_integer(&mut iter)?
+            .resize(bits)
+            .into_odd()
+            .ok_or("q is even")?;
 
         // exponent 1 - d mod (p - 1)
-        let exp1 = decode_big_integer(&mut iter)?;
+        let exp1 = decode_big_integer(&mut iter)?.resize(bits);
 
-        if (&d % (&p - BigUint::one())) != exp1 {
+        if (&d % (p.as_ref() - BoxedUint::one_like(&p)).into_nz().unwrap()) != exp1 {
             return Err("Exponent 1 does not match `d mod (p - 1)`");
         }
 
         // exponent 2 - d mod (q - 1)
-        let exp2 = decode_big_integer(&mut iter)?;
+        let exp2 = decode_big_integer(&mut iter)?.resize(bits);
 
-        if (&d % (&q - BigUint::one())) != exp2 {
+        if (&d % (q.as_ref() - BoxedUint::one_like(&p)).into_nz().unwrap()) != exp2 {
             return Err("Exponent 2 does not match `d mod (q - 1)`");
         }
 
         // coefficient - (inverse of q) mod p
-        let coeff = decode_big_integer(&mut iter)?;
+        let coeff = decode_big_integer(&mut iter)?.resize(bits);
 
-        if q.modinv(&p).unwrap() != coeff {
+        if q.invert_mod(p.as_nz_ref()).unwrap() != coeff {
             return Err("Coefficient does not match `(inv q) mod p`");
         }
 
@@ -611,8 +634,10 @@ impl FromASN1DER for RSAPrivateKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cryptography::pem::FromPemContent;
     use crate::util::bytes_from_hex;
     use num_traits::Num;
+    use std::fs;
 
     #[test]
     fn test_integer() {
@@ -637,7 +662,7 @@ mod tests {
     fn test_long_integer_encode() {
         assert_eq!(
             encode_big_integer(
-                &BigUint::from_str_radix("000102030405060708090a0b0c0d0e0f", 16).unwrap()
+                &BoxedUint::from_str_radix_vartime("000102030405060708090a0b0c0d0e0f", 16).unwrap()
             ),
             vec![
                 0x02, 0x0f, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
@@ -647,7 +672,7 @@ mod tests {
 
         assert_eq!(
             encode_big_integer(
-                &BigUint::from_str_radix(
+                &BoxedUint::from_str_radix_vartime(
                     "5838d9c49ae965ab1111a84e2abaedc8cd28037c1888cb25098ccb7caf2a6a52",
                     16
                 )
@@ -658,7 +683,7 @@ mod tests {
 
         assert_eq!(
             encode_big_integer(
-                &BigUint::from_str_radix(
+                &BoxedUint::from_str_radix_vartime(
                     "6a1ed0268c98b8abdd5cb6dbcb756907c9bdb7c8df81860aea24b03eeb7d1435",
                     16
                 )
@@ -669,24 +694,28 @@ mod tests {
 
         assert_eq!(
             encode_big_integer(
-                &BigUint::from_str_radix(
+                &BoxedUint::from_str_radix_vartime(
                     "84b3090888f2430dee55119b437750a5a23fed465412a09db3bb3fe9149e46df",
                     16
                 )
                 .unwrap()
             ),
-            bytes_from_hex("02210084b3090888f2430dee55119b437750a5a23fed465412a09db3bb3fe9149e46df")
+            bytes_from_hex(
+                "02210084b3090888f2430dee55119b437750a5a23fed465412a09db3bb3fe9149e46df"
+            )
         );
 
         assert_eq!(
             encode_big_integer(
-                &BigUint::from_str_radix(
+                &BoxedUint::from_str_radix_vartime(
                     "e79beccf80ae0bdf8c15238c1d75156c48e2d1c70f0b952426d8caf471f809cd",
                     16
                 )
                 .unwrap()
             ),
-            bytes_from_hex("022100e79beccf80ae0bdf8c15238c1d75156c48e2d1c70f0b952426d8caf471f809cd")
+            bytes_from_hex(
+                "022100e79beccf80ae0bdf8c15238c1d75156c48e2d1c70f0b952426d8caf471f809cd"
+            )
         );
     }
 
@@ -804,28 +833,52 @@ mod tests {
                 .into_iter()
             )
             .unwrap(),
-            BigUint::from_str_radix("000102030405060708090a0b0c0d0e0f", 16).unwrap()
+            BoxedUint::from_str_radix_vartime("000102030405060708090a0b0c0d0e0f", 16).unwrap()
         );
 
         assert_eq!(
             decode_big_integer(
-                &mut bytes_from_hex("0221009946349ffc55f8e3af7a8e6bb7bf3ce8bd56968c4e93127a5fd4c6549eaa87fd").into_iter()
-            ).unwrap(),
-            BigUint::from_str_radix("9946349ffc55f8e3af7a8e6bb7bf3ce8bd56968c4e93127a5fd4c6549eaa87fd", 16).unwrap()
+                &mut bytes_from_hex(
+                    "0221009946349ffc55f8e3af7a8e6bb7bf3ce8bd56968c4e93127a5fd4c6549eaa87fd"
+                )
+                .into_iter()
+            )
+            .unwrap(),
+            BoxedUint::from_str_radix_vartime(
+                "9946349ffc55f8e3af7a8e6bb7bf3ce8bd56968c4e93127a5fd4c6549eaa87fd",
+                16
+            )
+            .unwrap()
         );
 
         assert_eq!(
             decode_big_integer(
-                &mut bytes_from_hex("0220726ffc96035e5a54cf1c40b8748b9bad38d4bf67cebe865fb127f40506ecd200").into_iter()
-            ).unwrap(),
-            BigUint::from_str_radix("726ffc96035e5a54cf1c40b8748b9bad38d4bf67cebe865fb127f40506ecd200", 16).unwrap()
+                &mut bytes_from_hex(
+                    "0220726ffc96035e5a54cf1c40b8748b9bad38d4bf67cebe865fb127f40506ecd200"
+                )
+                .into_iter()
+            )
+            .unwrap(),
+            BoxedUint::from_str_radix_vartime(
+                "726ffc96035e5a54cf1c40b8748b9bad38d4bf67cebe865fb127f40506ecd200",
+                16
+            )
+            .unwrap()
         );
 
         assert_eq!(
             decode_big_integer(
-                &mut bytes_from_hex("022100df767a95048dd84fb9dff24d514e24368175e77c175086b94b9da17ac5bc1b41").into_iter()
-            ).unwrap(),
-            BigUint::from_str_radix("df767a95048dd84fb9dff24d514e24368175e77c175086b94b9da17ac5bc1b41", 16).unwrap()
+                &mut bytes_from_hex(
+                    "022100df767a95048dd84fb9dff24d514e24368175e77c175086b94b9da17ac5bc1b41"
+                )
+                .into_iter()
+            )
+            .unwrap(),
+            BoxedUint::from_str_radix_vartime(
+                "df767a95048dd84fb9dff24d514e24368175e77c175086b94b9da17ac5bc1b41",
+                16
+            )
+            .unwrap()
         );
     }
 

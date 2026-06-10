@@ -12,4 +12,3 @@ mod rabin_miller;
 mod sieve;
 #[cfg(test)]
 mod tests;
-pub mod modular_arithmetic;

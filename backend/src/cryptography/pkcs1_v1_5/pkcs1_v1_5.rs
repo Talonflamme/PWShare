@@ -1,5 +1,4 @@
-use crate::cryptography::rng::rng;
-use rand::RngCore;
+use rand::Rng;
 
 #[derive(Debug)]
 pub struct PKCS1v1_5EncodingError {
@@ -22,7 +21,8 @@ fn generate_random_pad_string(length: usize) -> Vec<u8> {
             // no 0, since it's required as a separator
 
             if random_cache.len() == 0 {
-                random_cache.extend_from_slice(&rng!().next_u32().to_be_bytes());
+                let bytes = rand::rng().next_u32().to_be_bytes();
+                random_cache.extend_from_slice(&bytes);
             }
 
             *byte = random_cache.pop().unwrap();

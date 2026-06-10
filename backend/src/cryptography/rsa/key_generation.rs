@@ -1,32 +1,23 @@
 use super::{rabin_miller::MillerRabinTest, RSAPrivateKey, Sieve};
-use crate::cryptography::rng::rng;
-use num_bigint::{BigUint, RandBigInt};
-use num_integer::Integer;
-use num_traits::One;
+use crypto_bigint::{BitOps, BoxedUint, Choice, Gcd, Odd, One, RandomBits};
 
 /// Generate a prime number with the specified amount of bits.
 /// `L` is the capacity of the Uint type.
 /// `num_bits` is the actual amount of bits that are randomized. Hence, the `num_bits` least significant
 /// bits are randomized. This means that `num_bits` must be <= L * 64.
-fn generate_prime(num_bits: u64) -> BigUint {
+fn generate_prime(num_bits: u64) -> Odd<BoxedUint> {
     // the only case that this loop actually uses a second iteration is if there is no prime between the randomly
     // selected start and Uint::MAX. This has a chance of ~10^-307 and will never happen.
 
     loop {
-        let mut start: BigUint = rng!().gen_biguint(num_bits);
-        start.set_bit(0, true); // make it odd
+        let mut start: BoxedUint = BoxedUint::random_bits(&mut rand::rng(), num_bits as u32);
+        start.set_bit(0, Choice::TRUE); // make it odd
 
         // Instead of checking every or every 2 possible primes, we use a Sieve, similar to the Sieve of Eratosthenes algorithm.
         // So we only call `is_prime` on candidates that are not divisible by any of the first 2048 primes.
         let sieve = Sieve::new(start, num_bits);
 
         for mut num in sieve {
-            let bits = num.bits();
-
-            if bits > num_bits {
-                break; // we looked too far. The number exceeded the max of 2^(num_bits).
-            }
-
             if is_prime(&mut num) {
                 return num;
             }
@@ -36,7 +27,7 @@ fn generate_prime(num_bits: u64) -> BigUint {
 
 /// Checks if the given `candidate` is likely to be prime.
 /// Chance of a false-positive is less than 10^-6
-fn is_prime(candidate: &mut BigUint) -> bool {
+fn is_prime(candidate: &mut Odd<BoxedUint>) -> bool {
     let rabin_miller = MillerRabinTest::new(candidate);
     rabin_miller.is_prime(None)
 }
@@ -45,7 +36,7 @@ fn is_prime(candidate: &mut BigUint) -> bool {
 ///
 /// `key_size` - The amount of bits of the modulus n. The two primes will have up to half of
 /// this amount of bits.
-fn generate_p_and_q(key_size: u64) -> (BigUint, BigUint) {
+fn generate_p_and_q(key_size: u64) -> (Odd<BoxedUint>, Odd<BoxedUint>) {
     // this amount of bits is half of the actual key (two primes are multiplied, two 1024 bit primes make a 1024² = 2048 bit key)
     let bits = key_size / 2; // L * 64 = number of bits for value type, divide by 2 to get the private keys.
     let p = generate_prime(bits);
@@ -56,60 +47,44 @@ fn generate_p_and_q(key_size: u64) -> (BigUint, BigUint) {
 
 /// Computes `λ(n)` with `n=pq` where λ is Carmichael's totient function. `p` and `q` are <i>assumed</i> to be prime.
 /// Since `n=pq`, `λ(n) = lcm(λ(p), λ(q))` and since p and q are primes, `λ(p) = p - 1` and `λ(q) = q - 1`. Hence, `λ(n) = lcm(p - 1, q - 1)`.
-fn compute_lambda(p: &mut BigUint, q: &mut BigUint) -> BigUint {
-    // applying that binary and operation resets the least significant bit. Since p and q are primes, that bit is initially 1.
-    // setting it to 0 effectively subtracts one from the numbers.
-    p.set_bit(0, false);
-    q.set_bit(0, false);
+fn compute_lambda(p: &BoxedUint, q: &BoxedUint) -> BoxedUint {
+    let p_minus_1 = p - BoxedUint::one_like(p);
+    let q_minus_1 = q - BoxedUint::one_like(q);
 
-    let lambda = p.lcm(q);
+    let gcd = (&p_minus_1).gcd(&q_minus_1).into_nz().unwrap();
+    let lcm = p_minus_1 / gcd * q_minus_1;
 
-    // since p and q were primes, the first bit was 1 and we set it again
-    p.set_bit(0, true);
-    q.set_bit(0, true);
-
-    lambda
+    lcm
 }
 
 // TODO: seems like e must be at least 65537 according to the standard..
 /// Choose an integer e such that 1 < e < λ(n) and gcd(e, λ(n))=1.
 /// The search starts at `2^16 + 1 = 65537` and goes down
-fn choose_e(lambda_n: &BigUint) -> BigUint {
-    for i in (2..17u64).rev() {
+fn choose_e(lambda_n: &BoxedUint) -> BoxedUint {
+    for i in (2..17u32).rev() {
         // actually one more, since 1 << n = 2^(n - 1)
-        let mut e = BigUint::one();
-        e.set_bit(i, true);
+        let mut e = BoxedUint::one_like(lambda_n);
+        e.set_bit(i, Choice::TRUE);
 
         if &e >= lambda_n {
             continue;
         }
 
-        if lambda_n.gcd(&e).is_one() {
+        if bool::from(lambda_n.gcd(&e).is_one()) {
             return e;
         }
     }
 
-    // Should never come here
-    // But we'll handle it anyway
-    let lbound = BigUint::from(2u8);
-
-    loop {
-        let e = rng!().gen_biguint_range(&lbound, lambda_n);
-
-        if lambda_n.gcd(&e).is_one() {
-            return e;
-        }
-    }
+    unreachable!();
 }
 
-// TODO: do massive speed ups here
 /// Generate the public and private keys. The key (i.e. modulus `n`) will have `key_size` bits.
 pub fn generate_key(key_size: u64) -> RSAPrivateKey {
     //?  (1) Choose two large prime numbers p and q
     let (mut p, mut q) = generate_p_and_q(key_size);
 
     //?  (2) Compute n=pq
-    let n = &p * &q;
+    let n = (p.as_ref() * q.as_ref()).into_odd().unwrap();
 
     //?  (3) Compute λ(n)
     let lambda_n = compute_lambda(&mut p, &mut q);
@@ -118,7 +93,7 @@ pub fn generate_key(key_size: u64) -> RSAPrivateKey {
     let e = choose_e(&lambda_n);
 
     //?  (5) Determine d as `d ≡ e^(-1) (mod λ(n))`
-    let d = e.modinv(&lambda_n).unwrap();
+    let d = e.invert_mod(&lambda_n.into_nz().unwrap()).unwrap();
 
     RSAPrivateKey::new(n, d, e, p, q)
 }

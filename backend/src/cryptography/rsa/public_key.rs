@@ -1,24 +1,24 @@
-use num_bigint::BigUint;
 use std::fmt::{Debug, Display};
+use crypto_bigint::{BoxedUint, Odd};
 
 #[derive(Debug)]
 pub struct RSAPublicKey {
-    pub n: BigUint,
-    pub e: BigUint,
+    pub n: Odd<BoxedUint>,
+    pub e: BoxedUint,
 }
 
 impl RSAPublicKey {
-    pub fn new(n: BigUint, e: BigUint) -> Self {
+    pub fn new(n: Odd<BoxedUint>, e: BoxedUint) -> Self {
         Self { n, e }
     }
 
-    pub fn encrypt(&self, message_plain: BigUint) -> BigUint {
+    pub fn encrypt(&self, message_plain: BoxedUint) -> BoxedUint {
         assert!(
-            self.n > message_plain,
+            self.n.as_ref() > &message_plain,
             "Message representative out of range. m must be < n"
         );
 
-        message_plain.modpow(&self.e, &self.n)
+        message_plain.pow_mod(&self.e, &self.n)
     }
 }
 

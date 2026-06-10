@@ -1,9 +1,10 @@
 use crate::cryptography::elliptic_curves::curve::{EllipticCurve, EllipticCurveConstants, Point};
 use crate::cryptography::elliptic_curves::ECDHPublicKey;
 use crate::tls::record::alert::{Alert, AlertResult};
+use crate::tls::record::ciphers::cipher_suite::CipherConfig;
 use crate::tls::record::variable_length_vec::VariableLengthVec;
 use crate::tls::{ReadableFromStream, Sink, WritableToSink};
-use num_bigint::BigUint;
+use crypto_bigint::{BoxedUint, Encoding};
 use pwshare_macros::{ReadableFromStream, WritableToSink};
 
 #[repr(u8)]
@@ -42,7 +43,7 @@ impl ECPoint {
                     x: point.x,
                     y: point.y,
                 }
-                .write(&mut vec, &curve)?;
+                .write(&mut vec, None)?;
                 Ok(Self {
                     point: vec.try_into().unwrap(),
                 })
@@ -78,12 +79,13 @@ impl ECPoint {
             // X448 uses 56 bytes
             // Encoding is in little-endian
             NamedCurve::X25519 | NamedCurve::X448 => {
-                if self.point.len() != curve.curve()?.coordinate_length {
+                let length = curve.curve()?.coordinate_length;
+                if self.point.len() != length {
                     Err(Alert::decode_error())
                 } else {
                     Ok(Point {
-                        x: BigUint::from_bytes_le(&self.point),
-                        y: BigUint::ZERO, // irrelevant
+                        x: BoxedUint::from_le_slice(&self.point, length as u32 * 8).unwrap(),
+                        y: BoxedUint::zero_with_precision(length as u32 * 8), // irrelevant
                     })
                 }
             }
@@ -94,20 +96,26 @@ impl ECPoint {
     /// Encodes the x coordinate of a point depending on which curve is used.
     /// For Weierstrass curves, this happens to be big-endian.
     /// For Montgomery curves, this happens to be little-endian.
-    pub fn encode_x_coordinate(x: BigUint, curve: NamedCurve) -> AlertResult<Vec<u8>> {
+    pub fn encode_x_coordinate(x: BoxedUint, curve: NamedCurve) -> AlertResult<Vec<u8>> {
         let size = curve.curve()?.coordinate_length;
 
-        let mut result = vec![0u8; size];
         let bytes = match curve {
             NamedCurve::SECP256R1 | NamedCurve::SECP384R1 | NamedCurve::SECP521R1 => {
-                x.to_bytes_be()
+                x.to_be_bytes()
             }
-            NamedCurve::X25519 | NamedCurve::X448 => x.to_bytes_le(),
+            NamedCurve::X25519 | NamedCurve::X448 => x.to_le_bytes(),
             NamedCurve::Unknown => unreachable!(),
         };
 
-        result[size - bytes.len()..].copy_from_slice(&bytes);
-        Ok(result)
+        if bytes.len() != size {
+            Err(Alert::internal_error(format!(
+                "parameter x has unexpected amount of bytes: {} ({} expected)",
+                bytes.len(),
+                size
+            )))
+        } else {
+            Ok(bytes.into())
+        }
     }
 
     /// When `named_curve` is a Weierstrass curve, checks if the given points sits on the curve.
@@ -132,33 +140,25 @@ impl ECPoint {
 #[derive(Debug)]
 struct UncompressedPointRepresentation {
     pub form: PointConversionForm,
-    pub x: BigUint,
-    pub y: BigUint,
+    pub x: BoxedUint,
+    pub y: BoxedUint,
 }
 
-impl UncompressedPointRepresentation {
-    fn write(&self, buffer: &mut impl Sink<u8>, named_curve: &NamedCurve) -> AlertResult<()> {
-        let curve = named_curve.curve()?;
-
-        let bytes = curve.p.bits().div_ceil(8) as usize;
-
+impl WritableToSink for UncompressedPointRepresentation {
+    fn write(&self, buffer: &mut impl Sink<u8>, _: Option<&CipherConfig>) -> AlertResult<()> {
         self.form.write(buffer, None)?;
 
-        let x = self.x.to_bytes_be();
+        let x = self.x.to_be_bytes();
+        buffer.extend_from_slice(&x);
 
-        // zero pad to left
-        buffer.append(vec![0u8; bytes - x.len()]);
-        buffer.append(x);
-
-        let y = self.y.to_bytes_be();
-
-        // zero pad to left again
-        buffer.append(vec![0u8; bytes - y.len()]);
-        buffer.append(y);
+        let y = self.y.to_be_bytes();
+        buffer.extend_from_slice(&y);
 
         Ok(())
     }
+}
 
+impl UncompressedPointRepresentation {
     fn read(stream: &mut impl Iterator<Item = u8>, named_curve: &NamedCurve) -> AlertResult<Self> {
         let curve = named_curve.curve()?;
 
@@ -172,13 +172,13 @@ impl UncompressedPointRepresentation {
             )); // Should not come this far
         }
 
-        let x: Vec<u8> = stream.take(bytes).collect();
+        let x: Box<[u8]> = stream.take(bytes).collect();
 
         if x.len() != bytes {
             return Err(Alert::decode_error());
         }
 
-        let y: Vec<u8> = stream.take(bytes).collect();
+        let y: Box<[u8]> = stream.take(bytes).collect();
 
         if y.len() != bytes {
             return Err(Alert::decode_error());
@@ -186,8 +186,8 @@ impl UncompressedPointRepresentation {
 
         Ok(Self {
             form,
-            x: BigUint::from_bytes_be(&x),
-            y: BigUint::from_bytes_be(&y),
+            x: BoxedUint::from_be_bytes(x),
+            y: BoxedUint::from_be_bytes(y),
         })
     }
 }
@@ -209,136 +209,151 @@ impl NamedCurve {
         match self {
             NamedCurve::SECP256R1 => Ok(EllipticCurve {
                 coordinate_length: 32,
-                p: BigUint::new(vec![
-                    0xffffffff, 0xffffffff, 0xffffffff, 0x0, 0x0, 0x0, 0x1, 0xffffffff,
-                ]),
+                p: BoxedUint::from_words([
+                    0xffffffffffffffff, 0xffffffff, 0x0, 0xffffffff00000001,
+                ])
+                    .into_odd()
+                    .unwrap(),
                 constants: EllipticCurveConstants::Weierstrass {
-                    a: BigUint::new(vec![
-                        0xfffffffc, 0xffffffff, 0xffffffff, 0x0, 0x0, 0x0, 0x1, 0xffffffff,
+                    a: BoxedUint::from_words([
+                        0xfffffffffffffffc, 0xffffffff, 0x0, 0xffffffff00000001,
                     ]),
-                    b: BigUint::new(vec![
-                        0x27d2604b, 0x3bce3c3e, 0xcc53b0f6, 0x651d06b0, 0x769886bc, 0xb3ebbd55,
-                        0xaa3a93e7, 0x5ac635d8,
+                    b: BoxedUint::from_words([
+                        0x3bce3c3e27d2604b, 0x651d06b0cc53b0f6, 0xb3ebbd55769886bc, 0x5ac635d8aa3a93e7,
                     ]),
                 },
                 G: Point {
-                    x: BigUint::new(vec![
-                        0xd898c296, 0xf4a13945, 0x2deb33a0, 0x77037d81, 0x63a440f2, 0xf8bce6e5,
-                        0xe12c4247, 0x6b17d1f2,
+                    x: BoxedUint::from_words([
+                        0xf4a13945d898c296, 0x77037d812deb33a0, 0xf8bce6e563a440f2, 0x6b17d1f2e12c4247,
                     ]),
-                    y: BigUint::new(vec![
-                        0x37bf51f5, 0xcbb64068, 0x6b315ece, 0x2bce3357, 0x7c0f9e16, 0x8ee7eb4a,
-                        0xfe1a7f9b, 0x4fe342e2,
+                    y: BoxedUint::from_words([
+                        0xcbb6406837bf51f5, 0x2bce33576b315ece, 0x8ee7eb4a7c0f9e16, 0x4fe342e2fe1a7f9b,
                     ]),
                 },
-                n: BigUint::new(vec![
-                    0xfc632551, 0xf3b9cac2, 0xa7179e84, 0xbce6faad, 0xffffffff, 0xffffffff, 0x0,
-                    0xffffffff,
-                ]),
+                n: BoxedUint::from_words([
+                    0xf3b9cac2fc632551, 0xbce6faada7179e84, 0xffffffffffffffff, 0xffffffff00000000,
+                ])
+                    .into_odd()
+                    .unwrap(),
             }),
             NamedCurve::SECP384R1 => Ok(EllipticCurve {
                 coordinate_length: 48,
-                p: BigUint::new(vec![
-                    0xffffffff, 0x0, 0x0, 0xffffffff, 0xfffffffe, 0xffffffff, 0xffffffff,
-                    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-                ]),
+                p: BoxedUint::from_words([
+                    0x00000000ffffffff, 0xffffffff00000000, 0xfffffffffffffffe,
+                    0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff,
+                ])
+                    .into_odd()
+                    .unwrap(),
                 constants: EllipticCurveConstants::Weierstrass {
-                    a: BigUint::new(vec![
-                        0xfffffffc, 0x0, 0x0, 0xffffffff, 0xfffffffe, 0xffffffff, 0xffffffff,
-                        0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                    a: BoxedUint::from_words([
+                        0x00000000fffffffc, 0xffffffff00000000, 0xfffffffffffffffe,
+                        0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff,
                     ]),
-                    b: BigUint::new(vec![
-                        0xd3ec2aef, 0x2a85c8ed, 0x8a2ed19d, 0xc656398d, 0x5013875a, 0x314088f,
-                        0xfe814112, 0x181d9c6e, 0xe3f82d19, 0x988e056b, 0xe23ee7e4, 0xb3312fa7,
+                    b: BoxedUint::from_words([
+                        0x2a85c8edd3ec2aef, 0xc656398d8a2ed19d, 0x0314088f5013875a,
+                        0x181d9c6efe814112, 0x988e056be3f82d19, 0xb3312fa7e23ee7e4,
                     ]),
                 },
                 G: Point {
-                    x: BigUint::new(vec![
-                        0x72760ab7, 0x3a545e38, 0xbf55296c, 0x5502f25d, 0x82542a38, 0x59f741e0,
-                        0x8ba79b98, 0x6e1d3b62, 0xf320ad74, 0x8eb1c71e, 0xbe8b0537, 0xaa87ca22,
+                    x: BoxedUint::from_words([
+                        0x3a545e3872760ab7, 0x5502f25dbf55296c, 0x59f741e082542a38,
+                        0x6e1d3b628ba79b98, 0x8eb1c71ef320ad74, 0xaa87ca22be8b0537,
                     ]),
-                    y: BigUint::new(vec![
-                        0x90ea0e5f, 0x7a431d7c, 0x1d7e819d, 0xa60b1ce, 0xb5f0b8c0, 0xe9da3113,
-                        0x289a147c, 0xf8f41dbd, 0x9292dc29, 0x5d9e98bf, 0x96262c6f, 0x3617de4a,
+                    y: BoxedUint::from_words([
+                        0x7a431d7c90ea0e5f, 0x0a60b1ce1d7e819d, 0xe9da3113b5f0b8c0,
+                        0xf8f41dbd289a147c, 0x5d9e98bf9292dc29, 0x3617de4a96262c6f,
                     ]),
                 },
-                n: BigUint::new(vec![
-                    0xccc52973, 0xecec196a, 0x48b0a77a, 0x581a0db2, 0xf4372ddf, 0xc7634d81,
-                    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-                ]),
+                n: BoxedUint::from_words([
+                    0xecec196accc52973, 0x581a0db248b0a77a, 0xc7634d81f4372ddf,
+                    0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff,
+                ])
+                    .into_odd()
+                    .unwrap(),
             }),
             NamedCurve::SECP521R1 => Ok(EllipticCurve {
                 coordinate_length: 66,
-                p: BigUint::new(vec![
-                    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-                    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-                    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0x1ff,
-                ]),
+                p: BoxedUint::from_words([
+                    0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff,
+                    0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff,
+                    0x1ff,
+                ])
+                    .into_odd()
+                    .unwrap(),
                 constants: EllipticCurveConstants::Weierstrass {
-                    a: BigUint::new(vec![
-                        0xfffffffc, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-                        0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-                        0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0x1ff,
+                    a: BoxedUint::from_words([
+                        0xfffffffffffffffc, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff,
+                        0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff,
+                        0x1ff,
                     ]),
-                    b: BigUint::new(vec![
-                        0x6b503f00, 0xef451fd4, 0x3d2c34f1, 0x3573df88, 0x3bb1bf07, 0x1652c0bd,
-                        0xec7e937b, 0x56193951, 0x8ef109e1, 0xb8b48991, 0x99b315f3, 0xa2da725b,
-                        0xb68540ee, 0x929a21a0, 0x8e1c9a1f, 0x953eb961, 0x51,
+                    b: BoxedUint::from_words([
+                        0xef451fd46b503f00, 0x3573df883d2c34f1, 0x1652c0bd3bb1bf07, 0x56193951ec7e937b,
+                        0xb8b489918ef109e1, 0xa2da725b99b315f3, 0x929a21a0b68540ee, 0x953eb9618e1c9a1f,
+                        0x51,
                     ]),
                 },
                 G: Point {
-                    x: BigUint::new(vec![
-                        0xc2e5bd66, 0xf97e7e31, 0x856a429b, 0x3348b3c1, 0xa2ffa8de, 0xfe1dc127,
-                        0xefe75928, 0xa14b5e77, 0x6b4d3dba, 0xf828af60, 0x53fb521, 0x9c648139,
-                        0x2395b442, 0x9e3ecb66, 0x404e9cd, 0x858e06b7, 0xc6,
+                    x: BoxedUint::from_words([
+                        0xf97e7e31c2e5bd66, 0x3348b3c1856a429b, 0xfe1dc127a2ffa8de, 0xa14b5e77efe75928,
+                        0xf828af606b4d3dba, 0x9c648139053fb521, 0x9e3ecb662395b442, 0x858e06b70404e9cd,
+                        0xc6,
                     ]),
-                    y: BigUint::new(vec![
-                        0x9fd16650, 0x88be9476, 0xa272c240, 0x353c7086, 0x3fad0761, 0xc550b901,
-                        0x5ef42640, 0x97ee7299, 0x273e662c, 0x17afbd17, 0x579b4468, 0x98f54449,
-                        0x2c7d1bd9, 0x5c8a5fb4, 0x9a3bc004, 0x39296a78, 0x118,
+                    y: BoxedUint::from_words([
+                        0x88be94769fd16650, 0x353c7086a272c240, 0xc550b9013fad0761, 0x97ee72995ef42640,
+                        0x17afbd17273e662c, 0x98f54449579b4468, 0x5c8a5fb42c7d1bd9, 0x39296a789a3bc004,
+                        0x118,
                     ]),
                 },
-                n: BigUint::new(vec![
-                    0x91386409, 0xbb6fb71e, 0x899c47ae, 0x3bb5c9b8, 0xf709a5d0, 0x7fcc0148,
-                    0xbf2f966b, 0x51868783, 0xfffffffa, 0xffffffff, 0xffffffff, 0xffffffff,
-                    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0x1ff,
-                ]),
+                n: BoxedUint::from_words([
+                    0xbb6fb71e91386409, 0x3bb5c9b8899c47ae, 0x7fcc0148f709a5d0, 0x51868783bf2f966b,
+                    0xfffffffffffffffa, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff,
+                    0x1ff,
+                ])
+                    .into_odd()
+                    .unwrap(),
             }),
             NamedCurve::X25519 => Ok(EllipticCurve {
                 coordinate_length: 32, // 32 bytes
-                p: BigUint::new(vec![
-                    0xffffffed, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-                    0xffffffff, 0x7fffffff,
-                ]), // 2^255 - 19
+                p: BoxedUint::from_words([
+                    0xffffffffffffffed, 0xffffffffffffffff, 0xffffffffffffffff, 0x7fffffffffffffff,
+                ])
+                    .into_odd()
+                    .unwrap(), // 2^255 - 19
                 constants: EllipticCurveConstants::Montgomery {
-                    A: BigUint::from(486662_u32),
+                    A: BoxedUint::from_words_with_precision([486662], 32 * 8),
+                    A_minus2_over4: BoxedUint::from_words_with_precision([121665], 32 * 8), // 121665 = (486662 - 2) / 4
                 },
-                n: BigUint::new(vec![
-                    0x5cf5d3ed, 0x5812631a, 0xa2f79cd6, 0x14def9de, 0x0, 0x0, 0x0, 0x10000000,
-                ]), // 2^252 + 0x14def9dea2f79cd65812631a5cf5d3ed
+                n: BoxedUint::from_words([
+                    0x5812631a5cf5d3ed, 0x14def9dea2f79cd6, 0x0000000000000000, 0x1000000000000000,
+                ])
+                    .into_odd()
+                    .unwrap(), // 2^252 + 0x14def9dea2f79cd65812631a5cf5d3ed
                 G: Point {
-                    x: BigUint::from(9_u32),
-                    y: BigUint::ZERO, // unused in Montgomery form
+                    x: BoxedUint::from_words_with_precision([9], 32 * 8),
+                    y: BoxedUint::zero_with_precision(32 * 8), // unused in Montgomery form
                 },
             }),
             NamedCurve::X448 => Ok(EllipticCurve {
                 coordinate_length: 56,
-                p: BigUint::new(vec![
-                    0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-                    0xffffffff, 0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-                    0xffffffff, 0xffffffff,
-                ]), // 2^448 - 2^224 - 1
+                p: BoxedUint::from_words([
+                    0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff, 0xfffffffeffffffff,
+                    0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff,
+                ])
+                    .into_odd()
+                    .unwrap(), // 2^448 - 2^224 - 1
                 constants: EllipticCurveConstants::Montgomery {
-                    A: BigUint::from(156326_u32),
+                    A: BoxedUint::from_words_with_precision([156326], 56 * 8),
+                    A_minus2_over4: BoxedUint::from_words_with_precision([39081], 56 * 8), // 39081 = (156326 - 2) / 4
                 },
-                n: BigUint::new(vec![
-                    0xab5844f3, 0x2378c292, 0x8dc58f55, 0x216cc272, 0xaed63690, 0xc44edb49,
-                    0x7cca23e9, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-                    0xffffffff, 0x3fffffff,
-                ]), // 2^446 - 0x8335dc163bb124b65129c96fde933d8d723a70aadc873d6d54a7bb0d
+                n: BoxedUint::from_words([
+                    0x2378c292ab5844f3, 0x216cc2728dc58f55, 0xc44edb49aed63690, 0xffffffff7cca23e9,
+                    0xffffffffffffffff, 0xffffffffffffffff, 0x3fffffffffffffff,
+                ])
+                    .into_odd()
+                    .unwrap(), // 2^446 - 0x8335dc163bb124b65129c96fde933d8d723a70aadc873d6d54a7bb0d
                 G: Point {
-                    x: BigUint::from(5_u32),
-                    y: BigUint::ZERO,
+                    x: BoxedUint::from_words_with_precision([5], 56 * 8),
+                    y: BoxedUint::zero_with_precision(56 * 8),
                 },
             }),
             NamedCurve::Unknown => Err(Alert::internal_error("Called .curve() on Unknown")),
@@ -359,7 +374,10 @@ pub struct ServerECDHParams {
 }
 
 impl ServerECDHParams {
-    pub fn from_curve_and_key(named_curve: NamedCurve, public_key: &ECDHPublicKey) -> AlertResult<Self> {
+    pub fn from_curve_and_key(
+        named_curve: NamedCurve,
+        public_key: &ECDHPublicKey,
+    ) -> AlertResult<Self> {
         Ok(Self {
             curve_params: ECParameters {
                 curve_type: ECCurveType::NamedCurve,
