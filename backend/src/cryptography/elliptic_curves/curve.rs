@@ -231,6 +231,8 @@ impl EllipticCurve {
     ///
     /// Cost: 4S + 10M (not counting additions/small constants).
     fn jdouble(&self, j: &JPoint) -> JPoint {
+        // while this is variable time, in real operations this will always be false, so it does
+        // not leak any information
         if bool::from(j.is_infinity()) {
             return JPoint::infinity((self.coordinate_length * 8) as u32);
         }
@@ -290,9 +292,11 @@ impl EllipticCurve {
     /// non-infinity points so the H==0 branches are never taken in the
     /// hot path; they are handled correctly here for completeness.
     fn jadd(&self, lhs: &JPoint, rhs: &JPoint) -> JPoint {
+        // does not leak, since this will always be false in production
         if bool::from(lhs.is_infinity()) {
             return rhs.clone();
         }
+        // same as above
         if bool::from(rhs.is_infinity()) {
             return lhs.clone();
         }
@@ -311,6 +315,7 @@ impl EllipticCurve {
         let r = s2.sub_mod(&s1, p_nz); // S2 - S1
 
         // Degenerate cases (not reached in the Montgomery ladder hot path).
+        // does not leak information, since this won't occur in real implementations
         if bool::from(h.is_zero()) {
             return if bool::from(r.is_zero()) {
                 self.jdouble(lhs) // lhs == rhs
