@@ -162,7 +162,8 @@ impl EllipticCurve {
         let mut swap = false;
 
         for t in (0..(self.coordinate_length * 8) as u32).rev() {
-            let k_t = scalar.bit_vartime(t); // TODO: scalar is secret in ECDHE
+            // only variable time in respect to index, which is the same no matter the scalar
+            let k_t = scalar.bit_vartime(t);
             swap ^= k_t;
             (x_2, x_3) = cswap!(swap, x_2, x_3);
             (z_2, z_3) = cswap!(swap, z_2, z_3);
@@ -357,7 +358,7 @@ impl EllipticCurve {
         let bit_len = self.n.bits_precision();
 
         for i in (0..bit_len).rev() {
-            // TODO: scalar is private and this operation must be kept private
+            // only variable time in respect to index, not the scalar
             let bit = scalar.bit_vartime(i); // 0 or 1, derived from public scalar
 
             (r0, r1) = cswap!(bit, r0, r1);
