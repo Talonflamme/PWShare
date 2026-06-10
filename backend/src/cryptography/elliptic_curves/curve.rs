@@ -154,10 +154,6 @@ impl EllipticCurve {
         let p = &self.p;
         let p_nz = p.as_nz_ref();
 
-        println!("p={}", p);
-        println!("u={}", u);
-        println!("u>=p {}", &u >= p.as_ref());
-
         let x_1 = u.clone();
         let mut x_2 = BoxedUint::one_like(scalar);
         let mut z_2 = BoxedUint::zero_like(scalar);
