@@ -1,4 +1,4 @@
-use crypto_bigint::{BoxedUint, Choice, CtEq, Odd, One, Zero};
+use crypto_bigint::{BoxedUint, Choice, CtEq, CtSelect, Odd, One, Zero};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Point {
@@ -75,15 +75,22 @@ pub struct EllipticCurve {
     pub p: Odd<BoxedUint>,
 }
 
-// TODO: make time constant?
-macro_rules! cswap {
-    ($swap:ident, $a:ident, $b:ident) => {
-        if $swap {
-            ($b, $a)
-        } else {
-            ($a, $b)
-        }
-    };
+#[inline]
+/// Conditional swap in constant time.
+/// If `swap` is `false`, does not swap `a` and `b` (unchanged).
+/// If `swap` is `true`, swaps `a` and `b`.
+fn cswap_uint(swap: Choice, a: &mut BoxedUint, b: &mut BoxedUint) {
+    BoxedUint::ct_swap(a, b, swap);
+}
+
+#[inline]
+/// Conditional swap in constant time.
+/// If `swap` is `false`, does not swap the values of `a` and `b` (unchanged).
+/// If `swap` is `true`, swaps the values of `a` and `b`.
+fn cswap_jpoint(swap: Choice, a: &mut JPoint, b: &mut JPoint) {
+    BoxedUint::ct_swap(&mut a.x, &mut b.x, swap);
+    BoxedUint::ct_swap(&mut a.y, &mut b.y, swap);
+    BoxedUint::ct_swap(&mut a.z, &mut b.z, swap);
 }
 
 #[allow(non_snake_case)]
@@ -159,14 +166,13 @@ impl EllipticCurve {
         let mut z_2 = BoxedUint::zero_like(scalar);
         let mut x_3 = u;
         let mut z_3 = BoxedUint::one_like(scalar);
-        let mut swap = false;
+        let mut swap = Choice::FALSE;
 
         for t in (0..(self.coordinate_length * 8) as u32).rev() {
-            // only variable time in respect to index, which is the same no matter the scalar
-            let k_t = scalar.bit_vartime(t);
+            let k_t = scalar.bit(t);
             swap ^= k_t;
-            (x_2, x_3) = cswap!(swap, x_2, x_3);
-            (z_2, z_3) = cswap!(swap, z_2, z_3);
+            cswap_uint(swap, &mut x_2, &mut x_3);
+            cswap_uint(swap, &mut z_2, &mut z_3);
             swap = k_t;
 
             let A = x_2.add_mod(&z_2, p_nz);
@@ -187,8 +193,8 @@ impl EllipticCurve {
             z_2 = E.mul_mod(&AA.add_mod(&A_minus2_over4.mul_mod(&E, p_nz), p_nz), p_nz);
         }
 
-        (x_2, _) = cswap!(swap, x_2, x_3);
-        (z_2, _) = cswap!(swap, z_2, z_3);
+        cswap_uint(swap, &mut x_2, &mut x_3);
+        cswap_uint(swap, &mut z_2, &mut z_3);
 
         // x_2 * z_2^(p-2) mod p  (Fermat inverse)
         let p_minus_2 = p.as_ref() - two;
@@ -358,13 +364,12 @@ impl EllipticCurve {
         let bit_len = self.n.bits_precision();
 
         for i in (0..bit_len).rev() {
-            // only variable time in respect to index, not the scalar
-            let bit = scalar.bit_vartime(i); // 0 or 1, derived from public scalar
+            let bit = scalar.bit(i); // 0 or 1, derived from public scalar
 
-            (r0, r1) = cswap!(bit, r0, r1);
+            cswap_jpoint(bit, &mut r0, &mut r1);
             r1 = self.jadd(&r0, &r1);
             r0 = self.jdouble(&r0);
-            (r0, r1) = cswap!(bit, r0, r1);
+            cswap_jpoint(bit, &mut r0, &mut r1);
         }
 
         self.to_affine(&r0)
