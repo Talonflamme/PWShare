@@ -12,6 +12,7 @@ pwshare-macros = { path = "pwshare-macros" }
 rand = "0.10.1"
 num-traits = "0.2.19"
 crypto-bigint = { version = "0.7.3", features = ["alloc", "rand_core"] }
+dudect-bencher = "0.7.0"
 
 [profile.release]
 debug = 1
