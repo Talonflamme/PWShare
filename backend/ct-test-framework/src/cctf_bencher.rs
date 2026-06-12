@@ -2,7 +2,7 @@ use crate::measure::{MeasurementMode, Measurer};
 use crate::result::BenchResult;
 use colored::Colorize;
 use rand::rngs::ChaCha8Rng;
-use rand::{Rng, SeedableRng};
+use rand::{Rng, RngExt, SeedableRng};
 use std::hint::black_box;
 
 /// Tests with less than this value are not evaluated.
@@ -97,6 +97,62 @@ impl Bencher {
         }
     }
 
+    /// Generate `n` inputs. The distribution between `Class::Left` (fixed)
+    /// and `Class::Right` (random) is 50/50.
+    fn generate_inputs<T: Clone, G: Fn(&mut dyn Rng) -> T>(
+        fixed_value: &T,
+        g: &G,
+        rng: &mut dyn Rng,
+        n: usize,
+    ) -> (Vec<Class>, Vec<T>) {
+        let mut inputs = Vec::with_capacity(n);
+        let mut classes = Vec::with_capacity(n);
+
+        for _ in 0..n {
+            if rng.random::<bool>() {
+                // Left (fixed)
+                let t = fixed_value.clone();
+                inputs.push(t);
+                classes.push(Class::Left);
+            } else {
+                // Right (random)
+                let t = g(rng);
+                inputs.push(t);
+                classes.push(Class::Right);
+            }
+        }
+        (classes, inputs)
+    }
+
+    /// Generates a `runner_func` to be used with `self.bench(...)`. Half of `amount_measurements`
+    /// are `Class::Left` and call `f` with a clone of `fixed_value`. The other half is `Class::Right`
+    /// and call `f` with a generated `T` of `g`.
+    pub fn generator<T: Clone, R, F: Fn(T) -> R, G: Fn(&mut dyn Rng) -> T>(
+        f: F,
+        random_generator: G,
+        fixed_value: T,
+        amount_measurements: usize,
+    ) -> impl Fn(&mut Self, &mut dyn Rng) {
+        move |runner: &mut Self, rng: &mut dyn Rng| {
+            const BATCH_SIZE: usize = 10_000;
+
+            let mut remaining = amount_measurements;
+
+            while remaining > 0 {
+                let batch = remaining.min(BATCH_SIZE);
+
+                let (classes, inputs) =
+                    Self::generate_inputs(&fixed_value, &random_generator, rng, batch);
+                
+                for (class, input) in classes.into_iter().zip(inputs.into_iter()) {
+                    runner.run_one(class, || f(input))
+                }
+
+                remaining -= BATCH_SIZE;
+            }
+        }
+    }
+
     /// Benches by calling the `runner_func`. Runs `AMOUNT_T_TESTS` t-tests on the same
     /// data (tests differ by cropping-values) and returns the
     /// maximum t-statistic by any of those tests.
@@ -142,12 +198,14 @@ impl Bencher {
         };
 
         // more tests with cropped data given multiple crop thresholds
-        let mut cropped_tests: Vec<f64> = (0..NUMBER_PERCENTILES).filter_map(|i| {
-            let p = get_percentile(i);
-            self.runtime_left.set_crop_percentile(p);
-            self.runtime_right.set_crop_percentile(p);
-            self.compute_t_statistic()
-        }).collect();
+        let mut cropped_tests: Vec<f64> = (0..NUMBER_PERCENTILES)
+            .filter_map(|i| {
+                let p = get_percentile(i);
+                self.runtime_left.set_crop_percentile(p);
+                self.runtime_right.set_crop_percentile(p);
+                self.compute_t_statistic()
+            })
+            .collect();
 
         result.push(first_test);
         result.append(&mut cropped_tests);
