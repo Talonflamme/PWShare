@@ -1,10 +1,5 @@
-mod cctf_bencher;
-mod measure;
-mod result;
-
-use crate::cctf_bencher::{BenchBuilder, Bencher, Class};
-use crate::measure::MeasurementMode;
-use rand::{Rng, RngExt};
+use rand::Rng;
+use ct_test_framework::{BenchBuilder, Bencher, MeasurementMode};
 
 fn rand_vec(len: usize, rng: &mut dyn Rng) -> Vec<u8> {
     let mut rand = vec![0; len];
@@ -23,7 +18,7 @@ fn is_all_zero(vec: Vec<u8>) -> bool {
 fn main() {
     let bencher = BenchBuilder::builder()
         .name("All-Zero")
-        .measure_mode(MeasurementMode::Time) // TODO: CpuCycles returns inf
+        .measure_mode(MeasurementMode::Time)
         .build()
         .unwrap();
 
