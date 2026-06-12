@@ -1,8 +1,9 @@
 use crate::measure::{MeasurementMode, Measurer};
+use crate::result::BenchResult;
+use colored::Colorize;
 use rand::rngs::ChaCha8Rng;
 use rand::{Rng, SeedableRng};
 use std::hint::black_box;
-use crate::result::BenchResult;
 
 /// Tests with less than this value are not evaluated.
 const T_TEST_MIN_SIZE: usize = 5000;
@@ -105,6 +106,15 @@ impl Bencher {
     /// A `max-t` < 5 does not mean the function is constant time, but also has
     /// no evidence of it being variable time.
     pub fn bench<F: Fn(&mut Self, &mut dyn Rng)>(mut self, runner_func: F) -> BenchResult {
+        #[cfg(debug_assertions)]
+        eprintln!(
+            "{}: {}",
+            "WARNING".bright_yellow().bold(),
+            "running in debug mode, results are unreliable. Use --release"
+                .yellow()
+                .bold()
+        );
+
         let mut rng = ChaCha8Rng::seed_from_u64(42);
 
         // collect measurements
