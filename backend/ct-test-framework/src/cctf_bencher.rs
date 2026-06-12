@@ -11,7 +11,7 @@ const T_TEST_MIN_SIZE: usize = 5000;
 const NUMBER_PERCENTILES: usize = 100;
 
 /// How many t-tests are performed on the same data. Each test has a different crop threshold.
-const AMOUNT_T_TESTS: usize = 100; // TODO: +2?
+const AMOUNT_T_TESTS: usize = NUMBER_PERCENTILES + 1;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Class {
@@ -131,14 +131,28 @@ impl Bencher {
     }
 
     fn perform_t_tests(&mut self) -> Vec<f64> {
-        (0..AMOUNT_T_TESTS)
-            .filter_map(|i| {
-                let p = get_percentile(i);
-                self.runtime_left.set_crop_percentile(p);
-                self.runtime_right.set_crop_percentile(p);
-                self.compute_t_statistic()
-            })
-            .collect()
+        let mut result = Vec::with_capacity(AMOUNT_T_TESTS);
+
+        // first-order test with all data (uncropped)
+        let first_test = {
+            self.runtime_left.set_crop_percentile(0.0);
+            self.runtime_right.set_crop_percentile(0.0);
+            self.compute_t_statistic()
+                .expect("Too little data to make meaningful conclusions")
+        };
+
+        // more tests with cropped data given multiple crop thresholds
+        let mut cropped_tests: Vec<f64> = (0..NUMBER_PERCENTILES).filter_map(|i| {
+            let p = get_percentile(i);
+            self.runtime_left.set_crop_percentile(p);
+            self.runtime_right.set_crop_percentile(p);
+            self.compute_t_statistic()
+        }).collect();
+
+        result.push(first_test);
+        result.append(&mut cropped_tests);
+
+        result
     }
 
     /// Computes the `statistic t` of a
