@@ -350,7 +350,7 @@ impl EllipticCurve {
     /// plus two branch-free `cswap`s — no secret-dependent control flow.
     /// One modular inversion (via Fermat) is performed at the end to convert
     /// back to affine.
-    pub fn scalar_multiply_weierstrass(&self, scalar: &BoxedUint, point: Point) -> Point {
+    fn scalar_multiply_weierstrass(&self, scalar: &BoxedUint, point: Point) -> Point {
         // Scalar == 0  →  caller should not reach here in a real protocol,
         // but we handle it gracefully.
         if bool::from(scalar.is_zero()) {

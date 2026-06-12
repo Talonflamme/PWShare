@@ -13,7 +13,7 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
 use readable_from_stream::impl_readable_from_stream_trait;
-use syn::{Attribute, DeriveInput, Ident, LitInt};
+use syn::{Attribute, DeriveInput, Ident, ItemFn, LitInt, parse_macro_input};
 
 fn get_repr_type(ast: &DeriveInput) -> Option<Ident> {
     for attr in &ast.attrs {
@@ -178,4 +178,15 @@ pub fn generate_k_sha512(_: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn generate_cipher_suite_tests(input: TokenStream) -> TokenStream {
     cipher_suite_tests::generate_cipher_tests(input)
+}
+
+#[proc_macro_attribute]
+pub fn ct_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemFn);
+    let expanded = quote! {
+        #[test]
+        #[ignore="ct_test"]
+        #input
+    };
+    expanded.into()
 }

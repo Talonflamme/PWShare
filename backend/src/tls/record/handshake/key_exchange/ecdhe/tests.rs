@@ -1,7 +1,9 @@
 use crate::cryptography::elliptic_curves::curve::*;
 use crate::tls::record::key_exchange::ecdhe::elliptic_curve::NamedCurve;
 use crate::util::{bytes_from_hex, UintDisplay};
-use crypto_bigint::BoxedUint;
+use crypto_bigint::{BoxedUint, One, RandomMod};
+use ct_test_framework::{BenchBuilder, Bencher};
+use pwshare_macros::ct_test;
 
 #[inline]
 fn uint(constant: u64, bits: u32) -> BoxedUint {
@@ -86,14 +88,32 @@ fn test_secp256r1_params() {
     // 256-bits, 32 bytes
     assert_eq!(curve.coordinate_length, 32);
 
-    assert_eq!(curve.p.hex(), "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff");
-    assert_eq!(curve.n.hex(), "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551");
-    assert_eq!(curve.G.x.hex(), "6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296");
-    assert_eq!(curve.G.y.hex(), "4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5");
+    assert_eq!(
+        curve.p.hex(),
+        "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff"
+    );
+    assert_eq!(
+        curve.n.hex(),
+        "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
+    );
+    assert_eq!(
+        curve.G.x.hex(),
+        "6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"
+    );
+    assert_eq!(
+        curve.G.y.hex(),
+        "4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5"
+    );
 
     if let EllipticCurveConstants::Weierstrass { a, b } = &curve.constants {
-        assert_eq!(a.hex(), "ffffffff00000001000000000000000000000000fffffffffffffffffffffffc");
-        assert_eq!(b.hex(), "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b");
+        assert_eq!(
+            a.hex(),
+            "ffffffff00000001000000000000000000000000fffffffffffffffffffffffc"
+        );
+        assert_eq!(
+            b.hex(),
+            "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b"
+        );
     } else {
         panic!("SECP256R1 should be in Weierstrass form");
     }
@@ -216,4 +236,26 @@ fn test_secp256r1_scalar_multiply() {
     };
 
     assert_eq!(output, expected_output);
+}
+
+#[ct_test]
+fn test_ct_scalar_multiply_montgomery() {
+    let bencher = BenchBuilder::builder()
+        .name("Scalar Multiply Montgomery")
+        .build()
+        .unwrap();
+
+    let curve = NamedCurve::X25519.curve().unwrap();
+
+    let runner = Bencher::generator(
+        |scalar| curve.scalar_multiply(&scalar, curve.G.clone()),
+        |rng| BoxedUint::random_mod_vartime(rng, curve.n.as_nz_ref()),
+        BoxedUint::one_like(&curve.p),
+        1_000_000,
+    );
+
+    let result = bencher.bench(runner);
+    println!("{}", result);
+
+    assert!(result.conclusion().is_probably_ct(), "Not constant time likely");
 }

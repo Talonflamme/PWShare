@@ -6,7 +6,7 @@ use rand::{Rng, RngExt, SeedableRng};
 use std::hint::black_box;
 
 /// Tests with less than this value are not evaluated.
-const T_TEST_MIN_SIZE: usize = 5000;
+const T_TEST_MIN_SIZE: usize = 2000;
 
 const NUMBER_PERCENTILES: usize = 100;
 
@@ -136,10 +136,10 @@ impl Bencher {
         move |runner: &mut Self, rng: &mut dyn Rng| {
             const BATCH_SIZE: usize = 10_000;
 
-            let mut remaining = amount_measurements;
+            let mut remaining = amount_measurements as i64;
 
             while remaining > 0 {
-                let batch = remaining.min(BATCH_SIZE);
+                let batch = (remaining as usize).min(BATCH_SIZE);
 
                 let (classes, inputs) =
                     Self::generate_inputs(&fixed_value, &random_generator, rng, batch);
@@ -148,7 +148,7 @@ impl Bencher {
                     runner.run_one(class, || f(input))
                 }
 
-                remaining -= BATCH_SIZE;
+                remaining -= BATCH_SIZE as i64;
             }
         }
     }

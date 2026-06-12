@@ -14,5 +14,8 @@ num-traits = "0.2.19"
 crypto-bigint = { version = "0.7.3", features = ["alloc", "rand_core"] }
 dudect-bencher = "0.7.0"
 
+[dev-dependencies]
+ct-test-framework = { path = "ct-test-framework" }
+
 [profile.release]
 debug = 1
